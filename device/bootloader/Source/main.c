@@ -1,14 +1,11 @@
-/*********************************************************************
-*                    SEGGER Microcontroller GmbH                     *
-*                        The Embedded Experts                        *
-**********************************************************************
-
--------------------------- END-OF-HEADER -----------------------------
-
-File    : main.c
-Purpose : Generic application start
-
-*/
+/**
+ * @file
+ * @author Alexandre Abadie <alexandre.abadie@inria.fr>
+ * @brief Device bootloader application
+ *
+ * @copyright Inria, 2024
+ *
+ */
 
 #include <stdint.h>
 #include <stdio.h>

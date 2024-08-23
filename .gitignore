@@ -1,1 +1,15 @@
+# Segger Studio specific files
+*.emSession
+*.jlink
+
+# Python compiled files
+*.pyc
+
+# Git conflict files
+*.orig
+
+# Visual Studio specific files
+.vscode/
+
+# Segger Studio output directory
 Output/
