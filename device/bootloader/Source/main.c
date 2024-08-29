@@ -10,48 +10,17 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <arm_cmse.h>
 #include <nrf.h>
 
-#define LED1_PIN 28
-#define LED2_PIN 29
-#define LED3_PIN 30
-#define LED4_PIN 31
+#include "radio.h"
+#include "tz.h"
 
-__attribute__((cmse_nonsecure_entry)) void increment_counter(void);
-__attribute__((cmse_nonsecure_entry)) void get_counter(uint32_t *counter);
-__attribute__((cmse_nonsecure_entry)) void initialize_leds(void);
-__attribute__((cmse_nonsecure_entry)) void toggle_led1(void);
-__attribute__((cmse_nonsecure_entry)) void toggle_led2(void);
-__attribute__((cmse_nonsecure_entry)) void reload_wdt(void);
+__attribute__((cmse_nonsecure_entry)) void reload_wdt0(void);
 
-static uint32_t _counter;
-
-__attribute__((cmse_nonsecure_entry)) void increment_counter(void) {
-    _counter++;
-}
-
-__attribute__((cmse_nonsecure_entry)) void get_counter(uint32_t *counter) {
-    *counter = _counter;
-}
-
-__attribute__((cmse_nonsecure_entry)) void initialize_leds(void) {
-    NRF_P0_S->DIRSET = (1 << LED1_PIN);
-    NRF_P0_S->OUTSET = (1 << LED1_PIN);
-    NRF_P0_S->DIRSET = (1 << LED2_PIN);
-    NRF_P0_S->OUTSET = (1 << LED2_PIN);
-}
-
-__attribute__((cmse_nonsecure_entry)) void toggle_led1(void) {
-    NRF_P0_S->OUT ^= (1 << LED1_PIN);
-}
-
-__attribute__((cmse_nonsecure_entry)) void toggle_led2(void) {
-    NRF_P0_S->OUT ^= (1 << LED2_PIN);
-}
-
-__attribute__((cmse_nonsecure_entry)) void reload_wdt(void) {
+__attribute__((cmse_nonsecure_entry)) void reload_wdt0(void) {
     NRF_WDT0_S->RR[0] = WDT_RR_RR_Reload << WDT_RR_RR_Pos;
 }
 
@@ -62,9 +31,9 @@ typedef struct {
     reset_handler_t reset_handler; ///< Reset handler
 } vector_table_t;
 
-static vector_table_t *table = (vector_table_t *)0x00020000; // Image should start with vector table
+static vector_table_t *table = (vector_table_t *)0x00004000; // Image should start with vector table
 
-static void initialize_watchdog(void) {
+static void setup_watchdog0(void) {
 
     // Configuration: keep running while sleeping + pause when halted by debugger
     NRF_WDT0_S->CONFIG = (WDT_CONFIG_SLEEP_Run << WDT_CONFIG_SLEEP_Pos |
@@ -74,17 +43,28 @@ static void initialize_watchdog(void) {
     NRF_WDT0_S->RREN = WDT_RREN_RR0_Enabled << WDT_RREN_RR0_Pos;
 
     // Configure timeout and callback
-    NRF_WDT0_S->CRV = (5 * 32768) - 1;
+    NRF_WDT0_S->CRV = 32768 - 1;
     NRF_WDT0_S->TASKS_START = WDT_TASKS_START_TASKS_START_Trigger << WDT_TASKS_START_TASKS_START_Pos;
 }
 
-static void initialize_ns(void) {
+static void setup_watchdog1(void) {
+
+    // Configuration: keep running while sleeping + pause when halted by debugger
+    NRF_WDT1_S->CONFIG = (WDT_CONFIG_SLEEP_Run << WDT_CONFIG_SLEEP_Pos);
+
+    // Enable reload register 0
+    NRF_WDT1_S->RREN = WDT_RREN_RR0_Enabled << WDT_RREN_RR0_Pos;
+
+    // Configure timeout and callback
+    NRF_WDT1_S->CRV = 32768 - 1;
+}
+
+static void setup_ns_user(void) {
 
     // Prioritize Secure exceptions over Non-Secure
     // Set non-banked exceptions to target Non-Secure
-    // Don't allow Non-Secure firmware to issue System resets
     uint32_t aircr = SCB->AIRCR & (~(SCB_AIRCR_VECTKEY_Msk));
-    aircr |= SCB_AIRCR_PRIS_Msk | SCB_AIRCR_BFHFNMINS_Msk | SCB_AIRCR_SYSRESETREQS_Msk;
+    aircr |= SCB_AIRCR_PRIS_Msk | SCB_AIRCR_BFHFNMINS_Msk;
     SCB->AIRCR = ((0x05FAUL << SCB_AIRCR_VECTKEY_Pos) & SCB_AIRCR_VECTKEY_Msk) | aircr;
 
     // Allow FPU in non secure
@@ -104,76 +84,146 @@ static void initialize_ns(void) {
     SAU->CTRL |= 1 << 1;  // Make all memory non secure
 
     // Configure secure RAM. One RAM region takes 8KiB so secure RAM is 128KiB.
-    for (uint8_t region = 0; region < 16; region++) {
-        NRF_SPU_S->RAMREGION[region].PERM = (SPU_RAMREGION_PERM_READ_Enable << SPU_RAMREGION_PERM_READ_Pos |
-                                             SPU_RAMREGION_PERM_WRITE_Enable << SPU_RAMREGION_PERM_WRITE_Pos |
-                                             SPU_RAMREGION_PERM_EXECUTE_Enable << SPU_RAMREGION_PERM_EXECUTE_Pos |
-                                             SPU_RAMREGION_PERM_SECATTR_Secure << SPU_RAMREGION_PERM_SECATTR_Pos);
-    }
+    tz_configure_ram_secure(0, 3);
     // Configure non secure RAM
-    for (uint8_t region = 16; region < 64; region++) {
-        NRF_SPU_S->RAMREGION[region].PERM = (SPU_RAMREGION_PERM_READ_Enable << SPU_RAMREGION_PERM_READ_Pos |
-                                             SPU_RAMREGION_PERM_WRITE_Enable << SPU_RAMREGION_PERM_WRITE_Pos |
-                                             SPU_RAMREGION_PERM_EXECUTE_Enable << SPU_RAMREGION_PERM_EXECUTE_Pos |
-                                             SPU_RAMREGION_PERM_SECATTR_Non_Secure << SPU_RAMREGION_PERM_SECATTR_Pos);
-    }
+    tz_configure_ram_non_secure(4, 48);
 
-    // First flash regions are secure. One flash region takes 16KiB so secure flash is 128 KiB.
-    for (uint8_t region = 0; region < 8; region++) {
-        NRF_SPU_S->FLASHREGION[region].PERM = (SPU_FLASHREGION_PERM_READ_Enable << SPU_FLASHREGION_PERM_READ_Pos |
-                                               SPU_FLASHREGION_PERM_WRITE_Enable << SPU_FLASHREGION_PERM_WRITE_Pos |
-                                               SPU_FLASHREGION_PERM_EXECUTE_Enable << SPU_FLASHREGION_PERM_EXECUTE_Pos |
-                                               SPU_FLASHREGION_PERM_SECATTR_Secure << SPU_FLASHREGION_PERM_SECATTR_Pos);
-    }
+    // First flash region (16kiB) is secure and contains the bootloader
+    tz_configure_flash_secure(0, 1);
     // Configure non secure flash address space
-    for (uint8_t region = 8; region < 64; region++) {
-        NRF_SPU_S->FLASHREGION[region].PERM = (SPU_FLASHREGION_PERM_READ_Enable << SPU_FLASHREGION_PERM_READ_Pos |
-                                               SPU_FLASHREGION_PERM_WRITE_Enable << SPU_FLASHREGION_PERM_WRITE_Pos |
-                                               SPU_FLASHREGION_PERM_EXECUTE_Enable << SPU_FLASHREGION_PERM_EXECUTE_Pos |
-                                               SPU_FLASHREGION_PERM_SECATTR_Non_Secure << SPU_FLASHREGION_PERM_SECATTR_Pos);
-    }
+    tz_configure_flash_non_secure(1, 63);
 
     // Configure Non Secure Callable subregion
-    NRF_SPU_S->FLASHNSC[0].REGION = 7;
+    NRF_SPU_S->FLASHNSC[0].REGION = 0;
     NRF_SPU_S->FLASHNSC[0].SIZE = 8;
 
-    // Set clock NS as non secure
-    NRF_SPU_S->PERIPHID[5].PERM = SPU_PERIPHID_PERM_SECATTR_NonSecure << SPU_PERIPHID_PERM_SECATTR_Pos;
+    // Configure access to allows peripherals from non secure world
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_CLOCK_POWER_RESET);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_I2S0);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_MUTEX);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_OSCILLATORS_REGULATORS);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_P0_P1);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_PDM0);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_EGU0);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_EGU1);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_EGU2);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_EGU3);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_EGU4);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_EGU5);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_PWM0);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_PWM1);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_PWM2);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_PWM3);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_QDEC0);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_QDEC1);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_QSPI);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_RTC0);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_RTC1);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_SAADC);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_SPIM0_SPIS0_TWIM0_TWIS0_UARTE0);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_SPIM1_SPIS1_TWIM1_TWIS1_UARTE1);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_SPIM2_SPIS2_TWIM2_TWIS2_UARTE2);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_SPIM3_SPIS3_TWIM3_TWIS3_UARTE3);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_SPIM4);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_TIMER0);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_TIMER1);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_TIMER2);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_USBD);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_USBREGULATOR);
+
+    // Set interrupt state as non secure for non secure peripherals
+    NVIC_SetTargetState(I2S0_IRQn);
+    NVIC_SetTargetState(PDM0_IRQn);
+    NVIC_SetTargetState(EGU0_IRQn);
+    NVIC_SetTargetState(EGU1_IRQn);
+    NVIC_SetTargetState(EGU2_IRQn);
+    NVIC_SetTargetState(EGU3_IRQn);
+    NVIC_SetTargetState(EGU4_IRQn);
+    NVIC_SetTargetState(EGU5_IRQn);
+    NVIC_SetTargetState(PWM0_IRQn);
+    NVIC_SetTargetState(PWM1_IRQn);
+    NVIC_SetTargetState(PWM2_IRQn);
+    NVIC_SetTargetState(PWM3_IRQn);
+    NVIC_SetTargetState(QDEC0_IRQn);
+    NVIC_SetTargetState(QDEC1_IRQn);
+    NVIC_SetTargetState(QSPI_IRQn);
+    NVIC_SetTargetState(RTC0_IRQn);
+    NVIC_SetTargetState(RTC1_IRQn);
+    NVIC_SetTargetState(SAADC_IRQn);
+    NVIC_SetTargetState(SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn);
+    NVIC_SetTargetState(SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQn);
+    NVIC_SetTargetState(SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQn);
+    NVIC_SetTargetState(SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQn);
+    NVIC_SetTargetState(SPIM4_IRQn);
+    NVIC_SetTargetState(TIMER0_IRQn);
+    NVIC_SetTargetState(TIMER1_IRQn);
+    NVIC_SetTargetState(TIMER2_IRQn);
+    NVIC_SetTargetState(USBD_IRQn);
+    NVIC_SetTargetState(USBREGULATOR_IRQn);
+    NVIC_SetTargetState(GPIOTE1_IRQn);
+
+    // All GPIOs are non secure
+    NRF_SPU_S->GPIOPORT[0].PERM = 0;
+    NRF_SPU_S->GPIOPORT[1].PERM = 0;
 
     __DSB(); // Force memory writes before continuing
     __ISB(); // Flush and refill pipeline with updated permissions
 }
 
+static void _radio_callback(uint8_t *packet, uint8_t length) {
+    if (strncmp((void *)packet, "START", length) == 0) {
+        // System reset will switch to the user non secure partition
+        NVIC_SystemReset();
+    }
+}
+
 int main(void) {
 
-    // Check reset reason and remain in loop if reset was triggered by wdt timeout
+    setup_watchdog1();
+
+    // PPI connection: IPC_RECEIVE -> WDT_START
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_DPPIC);
+    NRF_SPU_S->DPPI[0].PERM &= ~(SPU_DPPI_PERM_CHANNEL0_Msk);
+    NRF_SPU_S->DPPI[0].LOCK |= SPU_DPPI_LOCK_LOCK_Locked << SPU_DPPI_LOCK_LOCK_Pos;
+    NRF_IPC_S->PUBLISH_RECEIVE[2] = IPC_PUBLISH_RECEIVE_EN_Enabled << IPC_PUBLISH_RECEIVE_EN_Pos;
+    NRF_WDT1_S->SUBSCRIBE_START = WDT_SUBSCRIBE_START_EN_Enabled << WDT_SUBSCRIBE_START_EN_Pos;;
+    NRF_DPPIC_S->CHENSET = (DPPIC_CHENSET_CH0_Enabled << DPPIC_CHENSET_CH0_Pos);
+    NRF_DPPIC_NS->CHENSET = (DPPIC_CHENSET_CH0_Enabled << DPPIC_CHENSET_CH0_Pos);
+
+    // Netcode must remain on
+    radio_init(&_radio_callback, RADIO_BLE_1MBit);
+    radio_set_frequency(8);
+    radio_rx();
+
+    // Check reset reason and switch to user image if reset was not triggered by any wdt timeout
     uint32_t resetreas = NRF_RESET_S->RESETREAS;
     NRF_RESET_S->RESETREAS = NRF_RESET_S->RESETREAS;
-    if (resetreas & RESET_RESETREAS_DOG0_Detected << RESET_RESETREAS_DOG0_Pos) {
-        NRF_P0_S->DIRSET = (1 << LED4_PIN);
-        NRF_P0_S->OUTSET = (1 << LED4_PIN);
-        while (1) {
-            NRF_P0_S->OUT ^= (1 << LED4_PIN);
-            volatile uint16_t delay = 0xffff;
-            while (delay--) {}
-        }
+    if (!(
+        (resetreas & RESET_RESETREAS_DOG0_Detected << RESET_RESETREAS_DOG0_Pos) ||
+        (resetreas & RESET_RESETREAS_DOG1_Detected << RESET_RESETREAS_DOG1_Pos)
+    )) {
+        // Initialize watchdog and non secure access
+        setup_ns_user();
+        setup_watchdog0();
+
+        // Set the vector table address prior to jumping to image
+        SCB_NS->VTOR = (uint32_t)table;
+        __TZ_set_MSP_NS(table->msp);
+        __TZ_set_CONTROL_NS(0);
+
+        // Flush and refill pipeline
+        __ISB();
+
+        // Jump to non secure image
+        reset_handler_t reset_handler_ns = (reset_handler_t)(cmse_nsfptr_create(table->reset_handler));
+        reset_handler_ns();
+
+        while (1) {}
     }
 
-    // Initialize watchdog and non secure access
-    initialize_watchdog();
-    initialize_ns();
-
-    // Set the vector table address prior to jumping to image
-    SCB_NS->VTOR = (uint32_t)table;
-    __TZ_set_MSP_NS(table->msp);
-    __TZ_set_CONTROL_NS(0);
-
-    // Flush and refill pipeline
-    __ISB();
-
-    // Jump to non secure image
-    reset_handler_t reset_handler_ns = (reset_handler_t)(cmse_nsfptr_create(table->reset_handler));
-    reset_handler_ns();
-
-    while (1) {}
+    // Management code
+    NRF_P0_S->DIRSET = (1 << 31);
+    while (1) {
+        __WFE();
+    }
 }

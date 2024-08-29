@@ -21,6 +21,7 @@
     <ProgramSection alignment="4" load="No" name=".tbss" />
     <ProgramSection alignment="4" load="No" name=".tdata_run" />
     <ProgramSection alignment="4" load="No" name=".non_init" />
+    <ProgramSection alignment="4" load="No" name=".shared_data" start="0x20006000" />
     <ProgramSection alignment="8" size="__HEAPSIZE__" load="No" name=".heap" />
     <ProgramSection alignment="8" size="__STACKSIZE__" load="No" place_from_segment_end="Yes" name=".stack" />
     <ProgramSection alignment="8" size="__STACKSIZE_PROCESS__" load="No" name=".stack_process" />

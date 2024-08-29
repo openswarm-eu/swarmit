@@ -44,6 +44,8 @@ extern uint32_t __bss_start__;
 extern uint32_t __bss_end__;
 extern uint32_t __tbss_start__;
 extern uint32_t __tbss_end__;
+extern uint32_t __shared_data_start__;
+extern uint32_t __shared_data_end__;
 
 extern uint32_t __heap_start__;
 extern uint32_t __heap_end__;
@@ -73,47 +75,47 @@ void HardFault_Handler(void);
 void SecureFault_Handler(void);
 
 // External interrupts handlers
-__attribute__ ((weak)) void FPU_IRQHandler(void);
-__attribute__ ((weak)) void CACHE_IRQHandler(void);
-__attribute__ ((weak)) void SPU_IRQHandler(void);
-__attribute__ ((weak)) void CLOCK_POWER_IRQHandler(void);
-__attribute__ ((weak)) void SERIAL0_IRQHandler(void);
-__attribute__ ((weak)) void SERIAL1_IRQHandler(void);
-__attribute__ ((weak)) void SPIM4_IRQHandler(void);
-__attribute__ ((weak)) void SERIAL2_IRQHandler(void);
-__attribute__ ((weak)) void SERIAL3_IRQHandler(void);
-__attribute__ ((weak)) void GPIOTE0_IRQHandler(void);
-__attribute__ ((weak)) void SAADC_IRQHandler(void);
-__attribute__ ((weak)) void TIMER0_IRQHandler(void);
-__attribute__ ((weak)) void TIMER1_IRQHandler(void);
-__attribute__ ((weak)) void TIMER2_IRQHandler(void);
-__attribute__ ((weak)) void RTC0_IRQHandler(void);
-__attribute__ ((weak)) void RTC1_IRQHandler(void);
-__attribute__ ((weak)) void WDT0_IRQHandler(void);
-__attribute__ ((weak)) void WDT1_IRQHandler(void);
-__attribute__ ((weak)) void COMP_LPCOMP_IRQHandler(void);
-__attribute__ ((weak)) void EGU0_IRQHandler(void);
-__attribute__ ((weak)) void EGU1_IRQHandler(void);
-__attribute__ ((weak)) void EGU2_IRQHandler(void);
-__attribute__ ((weak)) void EGU3_IRQHandler(void);
-__attribute__ ((weak)) void EGU4_IRQHandler(void);
-__attribute__ ((weak)) void EGU5_IRQHandler(void);
-__attribute__ ((weak)) void PWM0_IRQHandler(void);
-__attribute__ ((weak)) void PWM1_IRQHandler(void);
-__attribute__ ((weak)) void PWM2_IRQHandler(void);
-__attribute__ ((weak)) void PWM3_IRQHandler(void);
-__attribute__ ((weak)) void PDM0_IRQHandler(void);
-__attribute__ ((weak)) void I2S0_IRQHandler(void);
-__attribute__ ((weak)) void IPC_IRQHandler(void);
-__attribute__ ((weak)) void QSPI_IRQHandler(void);
-__attribute__ ((weak)) void NFCT_IRQHandler(void);
-__attribute__ ((weak)) void GPIOTE1_IRQHandler(void);
-__attribute__ ((weak)) void QDEC0_IRQHandler(void);
-__attribute__ ((weak)) void QDEC1_IRQHandler(void);
-__attribute__ ((weak)) void USBD_IRQHandler(void);
-__attribute__ ((weak)) void USBREGULATOR_IRQHandler(void);
-__attribute__ ((weak)) void KMU_IRQHandler(void);
-__attribute__ ((weak)) void CRYPTOCELL_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void FPU_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void CACHE_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void SPU_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void CLOCK_POWER_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void SERIAL0_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void SERIAL1_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void SPIM4_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void SERIAL2_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void SERIAL3_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void GPIOTE0_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void SAADC_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void TIMER0_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void TIMER1_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void TIMER2_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void RTC0_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void RTC1_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void WDT0_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void WDT1_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void COMP_LPCOMP_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void EGU0_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void EGU1_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void EGU2_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void EGU3_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void EGU4_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void EGU5_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void PWM0_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void PWM1_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void PWM2_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void PWM3_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void PDM0_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void I2S0_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void IPC_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void QSPI_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void NFCT_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void GPIOTE1_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void QDEC0_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void QDEC1_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void USBD_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void USBREGULATOR_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void KMU_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void CRYPTOCELL_IRQHandler(void);
 
 // Vector table
 typedef void(*vector_table_t)(void);
@@ -139,8 +141,12 @@ const vector_table_t _vectors[496] __attribute__((used, section(".vectors"))) = 
     // External Interrupts
     FPU_IRQHandler,
     CACHE_IRQHandler,
+    0,
     SPU_IRQHandler,
+    0,
     CLOCK_POWER_IRQHandler,
+    0,
+    0,
     SERIAL0_IRQHandler,
     SERIAL1_IRQHandler,
     SPIM4_IRQHandler,
@@ -275,17 +281,17 @@ void Reset_Handler(void) {
         *src++ = 0;
     }
 
+    src = &__shared_data_start__;
+    while(src < &__shared_data_end__) {
+        *src++ = 0;
+    }
+
     // Calling constructors
     typedef void (*ctor_func_t)(void);
     ctor_func_t func = (ctor_func_t)&__ctors_start__;
     while(&func < (ctor_func_t *)&__ctors_end__) {
         func++();
     }
-
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3)
-    // Initialize the heap
-    __SEGGER_RTL_init_heap(&__heap_start__, __HEAPSIZE__);
-#endif
 
     SystemInit();
     main();
