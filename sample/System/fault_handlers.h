@@ -140,25 +140,8 @@ static struct {
     volatile uint32_t afsr;                 // Auxiliary Fault Status Register (0xE000ED3C), Vendor controlled (optional)
 } hardfault_regs;
 
-static struct {
-    union {
-        volatile uint32_t word;
-        struct {
-            uint32_t LSERR          :  1;   // [0] Lazy state error flag
-            uint32_t SFARVALID      :  1;   // [1] Secure fault address valid
-            uint32_t LSPERR         :  1;   // [2] Lazy state preservation error flag
-            uint32_t INVTRAN        :  1;   // [3] Invalid transition flag
-            uint32_t AUVIOL         :  1;   // [4] Attribution unit violation flag
-            uint32_t INVER          :  1;   // [5] Invalid exception return flag
-            uint32_t INVIS          :  1;   // [6] Invalid integrity signature flag
-            uint32_t INVEP          :  1;   // [7] Invalid entry point
-            uint32_t                : 24;
-        } bits;
-    } sfsr;                                 // Secure Fault Status Register
-} securefault_reg;
 #endif
 
 void HardFaultHandler(uint32_t* sp);
-void SecureFaultHandler(uint32_t* sp);
 
 #endif // __FAULT_HANDLERS_H

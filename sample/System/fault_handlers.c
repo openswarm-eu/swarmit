@@ -44,23 +44,3 @@ void HardFaultHandler(uint32_t *sp) {
         __NOP();
     }
 }
-
-
-void SecureFaultHandler(uint32_t* sp) {
-#if defined(DEBUG)
-    securefault_reg.sfsr.word    = SCB->SFSR;   // System Handler Control and State Register
-    hardfault_regs.regs.r0       = sp[0];       // Register R0
-    hardfault_regs.regs.r1       = sp[1];       // Register R1
-    hardfault_regs.regs.r2       = sp[2];       // Register R2
-    hardfault_regs.regs.r3       = sp[3];       // Register R3
-    hardfault_regs.regs.r12      = sp[4];       // Register R12
-    hardfault_regs.regs.lr       = sp[5];       // Link register LR
-    hardfault_regs.regs.pc       = sp[6];       // Program counter PC
-    hardfault_regs.regs.psr.word = sp[7];       // Program status word PSR
-#else
-    (void)sp;
-#endif
-    while (1) {
-        __NOP();
-    }
-}

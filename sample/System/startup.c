@@ -14,9 +14,7 @@
 #include "fault_handlers.h"
 
 extern __NO_RETURN int main(void);
-
-// Import symbols defined by the SEGGER linker
-extern void __SEGGER_RTL_init_heap(void *ptr, size_t len);
+extern void system_init(void);
 
 extern uint32_t __data_load_start__;
 extern uint32_t __data_start__;
@@ -70,50 +68,49 @@ __attribute__ ((weak, alias("Dummy_Handler"))) void PendSV_Handler(void);
 __attribute__ ((weak, alias("Dummy_Handler"))) void SysTick_Handler(void);
 
 void HardFault_Handler(void);
-void SecureFault_Handler(void);
 
 // External interrupts handlers
-__attribute__ ((weak)) void FPU_IRQHandler(void);
-__attribute__ ((weak)) void CACHE_IRQHandler(void);
-__attribute__ ((weak)) void SPU_IRQHandler(void);
-__attribute__ ((weak)) void CLOCK_POWER_IRQHandler(void);
-__attribute__ ((weak)) void SERIAL0_IRQHandler(void);
-__attribute__ ((weak)) void SERIAL1_IRQHandler(void);
-__attribute__ ((weak)) void SPIM4_IRQHandler(void);
-__attribute__ ((weak)) void SERIAL2_IRQHandler(void);
-__attribute__ ((weak)) void SERIAL3_IRQHandler(void);
-__attribute__ ((weak)) void GPIOTE0_IRQHandler(void);
-__attribute__ ((weak)) void SAADC_IRQHandler(void);
-__attribute__ ((weak)) void TIMER0_IRQHandler(void);
-__attribute__ ((weak)) void TIMER1_IRQHandler(void);
-__attribute__ ((weak)) void TIMER2_IRQHandler(void);
-__attribute__ ((weak)) void RTC0_IRQHandler(void);
-__attribute__ ((weak)) void RTC1_IRQHandler(void);
-__attribute__ ((weak)) void WDT0_IRQHandler(void);
-__attribute__ ((weak)) void WDT1_IRQHandler(void);
-__attribute__ ((weak)) void COMP_LPCOMP_IRQHandler(void);
-__attribute__ ((weak)) void EGU0_IRQHandler(void);
-__attribute__ ((weak)) void EGU1_IRQHandler(void);
-__attribute__ ((weak)) void EGU2_IRQHandler(void);
-__attribute__ ((weak)) void EGU3_IRQHandler(void);
-__attribute__ ((weak)) void EGU4_IRQHandler(void);
-__attribute__ ((weak)) void EGU5_IRQHandler(void);
-__attribute__ ((weak)) void PWM0_IRQHandler(void);
-__attribute__ ((weak)) void PWM1_IRQHandler(void);
-__attribute__ ((weak)) void PWM2_IRQHandler(void);
-__attribute__ ((weak)) void PWM3_IRQHandler(void);
-__attribute__ ((weak)) void PDM0_IRQHandler(void);
-__attribute__ ((weak)) void I2S0_IRQHandler(void);
-__attribute__ ((weak)) void IPC_IRQHandler(void);
-__attribute__ ((weak)) void QSPI_IRQHandler(void);
-__attribute__ ((weak)) void NFCT_IRQHandler(void);
-__attribute__ ((weak)) void GPIOTE1_IRQHandler(void);
-__attribute__ ((weak)) void QDEC0_IRQHandler(void);
-__attribute__ ((weak)) void QDEC1_IRQHandler(void);
-__attribute__ ((weak)) void USBD_IRQHandler(void);
-__attribute__ ((weak)) void USBREGULATOR_IRQHandler(void);
-__attribute__ ((weak)) void KMU_IRQHandler(void);
-__attribute__ ((weak)) void CRYPTOCELL_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void FPU_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void CACHE_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void SPU_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void CLOCK_POWER_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void SERIAL0_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void SERIAL1_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void SPIM4_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void SERIAL2_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void SERIAL3_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void GPIOTE0_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void SAADC_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void TIMER0_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void TIMER1_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void TIMER2_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void RTC0_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void RTC1_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void WDT0_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void WDT1_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void COMP_LPCOMP_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void EGU0_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void EGU1_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void EGU2_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void EGU3_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void EGU4_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void EGU5_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void PWM0_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void PWM1_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void PWM2_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void PWM3_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void PDM0_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void I2S0_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void IPC_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void QSPI_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void NFCT_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void GPIOTE1_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void QDEC0_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void QDEC1_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void USBD_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void USBREGULATOR_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void KMU_IRQHandler(void);
+__attribute__ ((weak, alias("Dummy_Handler"))) void CRYPTOCELL_IRQHandler(void);
 
 // Vector table
 typedef void(*vector_table_t)(void);
@@ -126,7 +123,7 @@ const vector_table_t _vectors[496] __attribute__((used, section(".vectors"))) = 
     MemManage_Handler,                  // -12 MPU Fault Handler
     BusFault_Handler,                   // -11 Bus Fault Handler
     UsageFault_Handler,                 // -10 Usage Fault Handler
-    SecureFault_Handler,                //  -9 Secure Fault Handler
+    0,                                  //     Reserved
     0,                                  //     Reserved
     0,                                  //     Reserved
     0,                                  //     Reserved
@@ -139,8 +136,12 @@ const vector_table_t _vectors[496] __attribute__((used, section(".vectors"))) = 
     // External Interrupts
     FPU_IRQHandler,
     CACHE_IRQHandler,
+    0,
     SPU_IRQHandler,
+    0,
     CLOCK_POWER_IRQHandler,
+    0,
+    0,
     SERIAL0_IRQHandler,
     SERIAL1_IRQHandler,
     SPIM4_IRQHandler,
@@ -212,11 +213,6 @@ void Reset_Handler(void) {
     __set_PSP((uint32_t)&__stack_process_end__);
     __set_CONTROL(0);
 
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3)
-    __set_MSPLIM(__STACKSIZE__);
-    __set_PSPLIM(__STACKSIZE_PROCESS__);
-#endif
-
     uint32_t *src = &__data_load_start__;
     uint32_t *dst = &__data_start__;
     while(dst < &__data_end__) {
@@ -282,12 +278,15 @@ void Reset_Handler(void) {
         func++();
     }
 
-#if defined (__ARM_FEATURE_CMSE) && (__ARM_FEATURE_CMSE == 3)
-    // Initialize the heap
-    __SEGGER_RTL_init_heap(&__heap_start__, __HEAPSIZE__);
-#endif
+    /* Enable the FPU if the compiler used floating point unit instructions. __FPU_USED is a MACRO defined by the
+    * compiler. Since the FPU consumes energy, remember to disable FPU use in the compiler if floating point unit
+    * operations are not used in your code. */
+    #if (__FPU_USED == 1)
+        SCB->CPACR |= (3UL << 20) | (3UL << 22);
+        __DSB();
+        __ISB();
+    #endif
 
-    SystemInit();
     main();
 }
 
@@ -299,16 +298,6 @@ void HardFault_Handler(void) {
          "mrseq  R0, MSP            ;"  // Stacking was using MSP.
          "mrsne  R0, PSP            ;"  // Stacking was using PSP.
          "b      HardFaultHandler   ;"  // Stack pointer passed through R0.
-    );
-}
-
-void SecureFault_Handler(void) {
-    __ASM(
-         "tst    LR, #4             ;"  // Check EXC_RETURN in Link register bit 2.
-         "ite    EQ                 ;"
-         "mrseq  R0, MSP            ;"  // Stacking was using MSP.
-         "mrsne  R0, PSP            ;"  // Stacking was using PSP.
-         "b      SecureFaultHandler ;"  // Stack pointer passed through R0.
     );
 }
 
