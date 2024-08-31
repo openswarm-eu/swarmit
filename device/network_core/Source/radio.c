@@ -80,26 +80,21 @@ void radio_init(radio_cb_t callback, radio_ble_mode_t mode) {
     NRF_RADIO->POWER = (RADIO_POWER_POWER_Disabled << RADIO_POWER_POWER_Pos);
     NRF_RADIO->POWER = (RADIO_POWER_POWER_Enabled << RADIO_POWER_POWER_Pos);
 
-#if defined(NRF5340_XXAA)
     // Copy all the RADIO trim values from FICR into the target addresses (from errata v1.6 - 3.29 [158])
     for (uint32_t index = 0; index < 32ul && NRF_FICR_NS->TRIMCNF[index].ADDR != (uint32_t *)0xFFFFFFFFul; index++) {
         if (((uint32_t)NRF_FICR_NS->TRIMCNF[index].ADDR & 0xFFFFF000ul) == (volatile uint32_t)NRF_RADIO_NS) {
             *((volatile uint32_t *)NRF_FICR_NS->TRIMCNF[index].ADDR) = NRF_FICR_NS->TRIMCNF[index].DATA;
         }
     }
-#endif
 
     // General configuration of the radio.
     NRF_RADIO->MODE = ((RADIO_MODE_MODE_Ble_1Mbit + mode) << RADIO_MODE_MODE_Pos);  // Configure BLE mode
-#if defined(NRF5340_XXAA)
     // From errata v1.6 - 3.15 [117] RADIO: Changing MODE requires additional configuration
     if (mode == RADIO_BLE_2MBit) {
         *((volatile uint32_t *)0x41008588) = *((volatile uint32_t *)0x01FF0084);
     } else {
         *((volatile uint32_t *)0x41008588) = *((volatile uint32_t *)0x01FF0080);
     }
-
-#endif
 
     if (mode == RADIO_BLE_1MBit || mode == RADIO_BLE_2MBit) {
         NRF_RADIO->TXPOWER = (RADIO_TXPOWER_TXPOWER_0dBm << RADIO_TXPOWER_TXPOWER_Pos);  // 0dBm == 1mW Power output
@@ -114,11 +109,7 @@ void radio_init(radio_cb_t callback, radio_ble_mode_t mode) {
                            (RADIO_PCNF1_ENDIAN_Little << RADIO_PCNF1_ENDIAN_Pos) |    // Make the on air packet be little endian (this enables some useful features)
                            (RADIO_PCNF1_WHITEEN_Enabled << RADIO_PCNF1_WHITEEN_Pos);  // Enable data whitening feature.
     } else {                                                                          // Long ranges modes (125KBit/500KBit)
-#if defined(NRF5340_XXAA)
-        NRF_RADIO->TXPOWER = (RADIO_TXPOWER_TXPOWER_0dBm << RADIO_TXPOWER_TXPOWER_Pos);  // 0dBm Power output
-#else
-        NRF_RADIO->TXPOWER = (RADIO_TXPOWER_TXPOWER_Pos8dBm << RADIO_TXPOWER_TXPOWER_Pos);  // 8dBm Power output
-#endif
+        NRF_RADIO->TXPOWER = (RADIO_TXPOWER_TXPOWER_0dBm << RADIO_TXPOWER_TXPOWER_Pos);  // 0dBm Power outputf
 
         // Coded PHY (Long Range)
         NRF_RADIO->PCNF0 = (0 << RADIO_PCNF0_S1LEN_Pos) |
@@ -160,13 +151,6 @@ void radio_init(radio_cb_t callback, radio_ble_mode_t mode) {
     // Assign the callback function that will be called when a radio packet is received.
     radio_vars.callback = callback;
     radio_vars.state    = RADIO_STATE_IDLE;
-
-    // Configure the external High-frequency Clock. (Needed for correct operation)
-    NRF_CLOCK_NS->EVENTS_HFCLKSTARTED = 0;
-    while (NRF_CLOCK_NS->EVENTS_HFCLKSTARTED == 1) {}
-
-    NRF_CLOCK_NS->TASKS_HFCLKSTART = 1;
-    while (NRF_CLOCK_NS->EVENTS_HFCLKSTARTED == 0) {}
 
     // Configure the Interruptions
     NVIC_SetPriority(RADIO_IRQn, RADIO_INTERRUPT_PRIORITY);  // Set priority for Radio interrupts to 1

@@ -40,6 +40,11 @@ void radio_init(radio_cb_t callback, radio_ble_mode_t mode) {
     // Map P0.29 to network core
     NRF_P0_S->PIN_CNF[29] = GPIO_PIN_CNF_MCUSEL_NetworkMCU << GPIO_PIN_CNF_MCUSEL_Pos;
 
+    // Map P1.0-9 to network core
+    for (uint8_t pin = 0; pin < 10; pin++) {
+        NRF_P1_S->PIN_CNF[pin] = GPIO_PIN_CNF_MCUSEL_NetworkMCU << GPIO_PIN_CNF_MCUSEL_Pos;
+    }
+
     tz_configure_ram_non_secure(3, 1);
 
     NRF_IPC_S->INTENSET                       = 1 << IPC_CHAN_RADIO_RX;

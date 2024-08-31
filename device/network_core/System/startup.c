@@ -14,6 +14,7 @@
 #include "fault_handlers.h"
 
 extern __NO_RETURN int main(void);
+extern void system_init(void);
 
 // Import symbols defined by the SEGGER linker
 extern void __SEGGER_RTL_init_heap(void *ptr, size_t len);
@@ -216,7 +217,7 @@ void Reset_Handler(void) {
         func++();
     }
 
-    SystemInit();
+    system_init();
     main();
 }
 

@@ -30,26 +30,8 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 #include "system_nrf5340_network.h"
 #include "system_nrf53_approtect.h"
 
-/*lint ++flb "Enter library region" */
 
-
-#define __SYSTEM_CLOCK      (64000000UL)     /*!< NRF5340 network core uses a fixed System Clock Frequency of 64MHz */
-
-#if defined ( __CC_ARM )
-    uint32_t SystemCoreClock __attribute__((used)) = __SYSTEM_CLOCK;  
-#elif defined ( __ICCARM__ )
-    __root uint32_t SystemCoreClock = __SYSTEM_CLOCK;
-#elif defined   ( __GNUC__ )
-    uint32_t SystemCoreClock __attribute__((used)) = __SYSTEM_CLOCK;
-#endif
-
-void SystemCoreClockUpdate(void)
-{
-    SystemCoreClock = __SYSTEM_CLOCK;
-}
-
-void SystemInit(void)
-{
+void system_init(void) {
     /* Trimming of the device. Copy all the trimming values from FICR into the target addresses. Trim
      until one ADDR is not initialized. */
     uint32_t index = 0;
@@ -87,7 +69,10 @@ void SystemInit(void)
     /* Handle fw-branch APPROTECT setup. */
     nrf53_handle_approtect();
 
-    SystemCoreClockUpdate();
-}
+    // Configure the external High-frequency Clock. (Needed for correct operation)
+    NRF_CLOCK_NS->EVENTS_HFCLKSTARTED = 0;
+    while (NRF_CLOCK_NS->EVENTS_HFCLKSTARTED == 1) {}
 
-/*lint --flb "Leave library region" */
+    NRF_CLOCK_NS->TASKS_HFCLKSTART = 1;
+    while (NRF_CLOCK_NS->EVENTS_HFCLKSTARTED == 0) {}
+}

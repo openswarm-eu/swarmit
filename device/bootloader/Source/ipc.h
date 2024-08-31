@@ -16,15 +16,13 @@
 #include <nrf.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 #include "radio.h"
 
-#if defined(NRF_APPLICATION)
-#define NRF_MUTEX NRF_MUTEX_NS
-#elif defined(NRF_NETWORK)
-#define NRF_MUTEX NRF_APPMUTEX_NS
-#endif
-
 #define IPC_IRQ_PRIORITY (1)
+
+__attribute__((cmse_nonsecure_entry)) void log_data(uint8_t *data, size_t length);
 
 typedef enum {
     IPC_REQ_NONE,        ///< Sorry, but nothing
@@ -42,6 +40,7 @@ typedef enum {
     IPC_CHAN_REQ      = 0,  ///< Channel used for request events
     IPC_CHAN_RADIO_RX = 1,  ///< Channel used for radio RX events
     IPC_CHAN_STOP     = 2,  ///< Channel used for stopping the experiment
+    IPC_CHAN_LOG      = 3,  ///< Channel used for logging events
 } ipc_channels_t;
 
 typedef struct __attribute__((packed)) {
@@ -59,16 +58,17 @@ typedef struct __attribute__((packed)) {
     int8_t              rssi;       ///< RSSI value
 } ipc_radio_data_t;
 
-typedef struct {
-    uint8_t value;  ///< Byte containing the random value read
-} ipc_rng_data_t;
+typedef struct __attribute__((packed)) {
+    uint8_t length;
+    uint8_t data[127];
+} ipc_log_data_t;
 
 typedef struct __attribute__((packed)) {
     bool             net_ready;  ///< Network core is ready
     bool             net_ack;    ///< Network core acked the latest request
     ipc_req_t        req;        ///< IPC network request
+    ipc_log_data_t   log;        ///< Log data
     ipc_radio_data_t radio;      ///< Radio shared data
-    ipc_rng_data_t   rng;        ///< Rng share data
 } ipc_shared_data_t;
 
 /**
@@ -80,17 +80,16 @@ volatile __attribute__((section(".shared_data"))) ipc_shared_data_t ipc_shared_d
  * @brief Lock the mutex, blocks until the mutex is locked
  */
 static inline void mutex_lock(void) {
-    while (NRF_MUTEX->MUTEX[0]) {}
+    while (NRF_MUTEX_NS->MUTEX[0]) {}
 }
 
 /**
  * @brief Unlock the mutex, has no effect if the mutex is already unlocked
  */
 static inline void mutex_unlock(void) {
-    NRF_MUTEX->MUTEX[0] = 0;
+    NRF_MUTEX_NS->MUTEX[0] = 0;
 }
 
-#if defined(NRF_APPLICATION)
 static inline void ipc_network_call(ipc_req_t req) {
     if (req != IPC_REQ_NONE) {
         ipc_shared_data.req                 = req;
@@ -112,6 +111,11 @@ static inline void release_network_core(void) {
 
     while (!ipc_shared_data.net_ready) {}
 }
-#endif
+
+__attribute__((cmse_nonsecure_entry)) void log_data(uint8_t *data, size_t length) {
+    ipc_shared_data.log.length = length;
+    memcpy((void *)ipc_shared_data.log.data, data, length);
+    NRF_IPC_S->TASKS_SEND[IPC_CHAN_LOG] = 1;
+}
 
 #endif

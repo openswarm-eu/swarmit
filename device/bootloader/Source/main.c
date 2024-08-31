@@ -98,7 +98,6 @@ static void setup_ns_user(void) {
     NRF_SPU_S->FLASHNSC[0].SIZE = 8;
 
     // Configure access to allows peripherals from non secure world
-    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_CLOCK_POWER_RESET);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_I2S0);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_MUTEX);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_OSCILLATORS_REGULATORS);
@@ -170,8 +169,13 @@ static void setup_ns_user(void) {
     __ISB(); // Flush and refill pipeline with updated permissions
 }
 
+static const uint8_t swrmt_preamble[] = {
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07
+};
+
 static void _radio_callback(uint8_t *packet, uint8_t length) {
-    if (strncmp((void *)packet, "START", length) == 0) {
+    (void)length;
+    if (memcmp((void *)packet, swrmt_preamble, sizeof(swrmt_preamble)/sizeof(uint8_t)) == 0) {
         // System reset will switch to the user non secure partition
         NVIC_SystemReset();
     }
@@ -187,10 +191,10 @@ int main(void) {
     NRF_SPU_S->DPPI[0].LOCK |= SPU_DPPI_LOCK_LOCK_Locked << SPU_DPPI_LOCK_LOCK_Pos;
     NRF_IPC_S->PUBLISH_RECEIVE[2] = IPC_PUBLISH_RECEIVE_EN_Enabled << IPC_PUBLISH_RECEIVE_EN_Pos;
     NRF_WDT1_S->SUBSCRIBE_START = WDT_SUBSCRIBE_START_EN_Enabled << WDT_SUBSCRIBE_START_EN_Pos;;
-    NRF_DPPIC_S->CHENSET = (DPPIC_CHENSET_CH0_Enabled << DPPIC_CHENSET_CH0_Pos);
     NRF_DPPIC_NS->CHENSET = (DPPIC_CHENSET_CH0_Enabled << DPPIC_CHENSET_CH0_Pos);
+    NRF_DPPIC_S->CHENSET = (DPPIC_CHENSET_CH0_Enabled << DPPIC_CHENSET_CH0_Pos);
 
-    // Netcode must remain on
+    // Network core must remain on
     radio_init(&_radio_callback, RADIO_BLE_1MBit);
     radio_set_frequency(8);
     radio_rx();

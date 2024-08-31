@@ -1,4 +1,5 @@
 # Segger Studio specific files
+
 *.emSession
 *.jlink
 

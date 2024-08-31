@@ -28,15 +28,6 @@ static void delay_ms(uint32_t ms) {
 
 int main(void) {
     puts("Hello Non Secure World!");
-    NRF_CLOCK_NS->EVENTS_HFCLKSTARTED = 0;
-    while (NRF_CLOCK_NS->EVENTS_HFCLKSTARTED == 1) {}
-
-    NRF_CLOCK_NS->HFCLKSRC = CLOCK_HFCLKSRC_SRC_HFXO << CLOCK_HFCLKSRC_SRC_Pos;
-    NRF_CLOCK_NS->HFCLKCTRL = CLOCK_HFCLKCTRL_HCLK_Div1 << CLOCK_HFCLKCTRL_HCLK_Pos;
-
-    NRF_CLOCK_NS->TASKS_HFCLKSTART = 1;
-    while (NRF_CLOCK_NS->EVENTS_HFCLKSTARTED == 0) {}
-
     NRF_P0_NS->DIRSET = (1 << 30);
 
     NRF_TIMER0_NS->TASKS_CLEAR = 1;
