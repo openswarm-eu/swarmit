@@ -7,7 +7,7 @@
 #define SWRMT_OTA_CHUNK_SIZE        (128U)
 #define SWRMT_OTA_SHA256_LENGTH     (32U)
 
-static const uint8_t swrmt_preamble[SWRMT_PREAMBLE_LENGTH] = {
+static const uint8_t swrmt_preamble[] = {
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07
 };
 
@@ -38,8 +38,9 @@ typedef struct __attribute__((packed)) {
 } swrmt_ota_chunk_pkt_t;
 
 typedef enum {
+    SWRMT_NOTIFICATION_STATUS,
+    SWRMT_NOTIFICATION_OTA_START_ACK,
     SWRMT_NOTIFICATION_OTA_CHUNK_ACK,
-    SWRMT_NOTIFICATION_OTA_ERASE_DONE,
     SWRMT_NOTIFICATION_GPIO_EVENT,
     SWRMT_NOTIFICATION_LOG_EVENT,
 } swrmt_notification_type_t;

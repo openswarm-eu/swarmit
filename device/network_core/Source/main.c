@@ -60,7 +60,6 @@ static void _radio_callback(uint8_t *packet, uint8_t length) {
         ipc_shared_data.radio.rx_pdu.length = length;
         memcpy((void *)ipc_shared_data.radio.rx_pdu.buffer, packet, length);
         mutex_unlock();
-        return;
     }
 
     memcpy(_app_vars.req_buffer, ptr, length - SWRMT_PREAMBLE_LENGTH);
@@ -114,7 +113,7 @@ void _ota_start(const swrmt_ota_start_pkt_t *pkt) {
     radio_disable();
     swrmt_notification_t notification = {
         .device_id = _deviceid(),
-        .type = SWRMT_NOTIFICATION_OTA_ERASE_DONE,
+        .type = SWRMT_NOTIFICATION_OTA_START_ACK,
     };
     radio_tx((uint8_t *)&notification, sizeof(swrmt_notification_t));
 }
