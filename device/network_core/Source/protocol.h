@@ -11,10 +11,10 @@ static const uint8_t swrmt_preamble[] = {
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07
 };
 
-#define SWRMT_REQ_START         0x01        ///< Start the experiment
-#define SWRMT_REQ_STOP          0x02        ///< Stop the experiment
-#define SWRMT_REQ_OTA_START     0x03        ///< Start OTA
-#define SWRMT_REQ_OTA_CHUNK     0x04        ///< OTA chunk
+#define SWRMT_REQ_EXPERIMENT_START  0x01        ///< Start the experiment
+#define SWRMT_REQ_EXPERIMENT_STOP   0x02        ///< Stop the experiment
+#define SWRMT_REQ_OTA_START         0x03        ///< Start OTA
+#define SWRMT_REQ_OTA_CHUNK         0x04        ///< OTA chunk
 
 typedef struct __attribute__((packed)) {
     uint8_t         type;                       ///< Request type
@@ -33,8 +33,8 @@ typedef struct __attribute__((packed)) {
 
 typedef struct __attribute__((packed)) { 
     uint32_t index;                             ///< Index of the chunk
-    uint8_t  chunk[SWRMT_OTA_CHUNK_SIZE];       ///< Bytes array of the firmware chunk
     uint8_t  chunk_size;                        ///< Size of the chunk
+    uint8_t  chunk[SWRMT_OTA_CHUNK_SIZE];       ///< Bytes array of the firmware chunk
 } swrmt_ota_chunk_pkt_t;
 
 typedef enum {
@@ -50,7 +50,7 @@ typedef struct __attribute__((packed)) {
     swrmt_notification_type_t   type;
 } swrmt_notification_t;
 
-typedef struct {
+typedef struct __attribute__((packed)) {
     uint8_t port;  ///< Port number of the GPIO
     uint8_t pin;   ///< Pin number of the GPIO
     uint8_t value;

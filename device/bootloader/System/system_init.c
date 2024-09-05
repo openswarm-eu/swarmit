@@ -36,36 +36,6 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 void SystemStoreFICRNS(void);
 void SystemLockFICRNS(void);
 
-/* NRF5340 application core uses a variable System Clock Frequency that starts at 64MHz */
-#define __SYSTEM_CLOCK_MAX      (128000000UL)
-#define __SYSTEM_CLOCK_INITIAL  ( 64000000UL)
-
-#define TRACE_PIN_CNF_VALUE (   (GPIO_PIN_CNF_DIR_Output << GPIO_PIN_CNF_DIR_Pos) | \
-                                (GPIO_PIN_CNF_INPUT_Connect << GPIO_PIN_CNF_INPUT_Pos) | \
-                                (GPIO_PIN_CNF_PULL_Disabled << GPIO_PIN_CNF_PULL_Pos) | \
-                                (GPIO_PIN_CNF_DRIVE_H0H1 << GPIO_PIN_CNF_DRIVE_Pos) | \
-                                (GPIO_PIN_CNF_SENSE_Disabled << GPIO_PIN_CNF_SENSE_Pos) | \
-                                (GPIO_PIN_CNF_MCUSEL_TND << GPIO_PIN_CNF_MCUSEL_Pos))
-
-#define TRACE_TRACECLK_PIN   TAD_PSEL_TRACECLK_PIN_Traceclk
-#define TRACE_TRACEDATA0_PIN TAD_PSEL_TRACEDATA0_PIN_Tracedata0
-#define TRACE_TRACEDATA1_PIN TAD_PSEL_TRACEDATA1_PIN_Tracedata1
-#define TRACE_TRACEDATA2_PIN TAD_PSEL_TRACEDATA2_PIN_Tracedata2
-#define TRACE_TRACEDATA3_PIN TAD_PSEL_TRACEDATA3_PIN_Tracedata3
-
-#if defined ( __CC_ARM )
-    uint32_t SystemCoreClock __attribute__((used)) = __SYSTEM_CLOCK_INITIAL;
-#elif defined ( __ICCARM__ )
-    __root uint32_t SystemCoreClock = __SYSTEM_CLOCK_INITIAL;
-#elif defined   ( __GNUC__ )
-    uint32_t SystemCoreClock __attribute__((used)) = __SYSTEM_CLOCK_INITIAL;
-#endif
-
-void SystemCoreClockUpdate(void)
-{
-    SystemCoreClock = __SYSTEM_CLOCK_MAX >> (NRF_CLOCK_S->HFCLKCTRL & (CLOCK_HFCLKCTRL_HCLK_Msk));
-}
-
 void SystemInit(void)
 {
     /* Perform Secure-mode initialization routines. */
@@ -229,8 +199,6 @@ void SystemInit(void)
         __DSB();
         __ISB();
     #endif
-
-    SystemCoreClockUpdate();
 }
 
 /* Workaround to allow NS code to access FICR. Override NRF_FICR_NS to move FICR_NS buffer. */

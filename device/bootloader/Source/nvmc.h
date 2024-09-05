@@ -8,7 +8,6 @@
 
 #define FLASH_PAGE_SIZE 4096
 #define FLASH_OFFSET 0x0
-#define FLASH_PAGE_NUM 256
 
 //=========================== public ===========================================
 

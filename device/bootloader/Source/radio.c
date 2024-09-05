@@ -15,53 +15,17 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "clock.h"
 #include "ipc.h"
 #include "radio.h"
 #include "tz.h"
 
 //=========================== variables ========================================
 
-static radio_cb_t _radio_callback = NULL;
+extern ipc_shared_data_t ipc_shared_data;
 
 //=========================== public ===========================================
 
-void radio_init(radio_cb_t callback, radio_ble_mode_t mode) {
-
-    hfclk_init();
-
-    // Disable all DCDC regulators (use LDO)
-    NRF_REGULATORS_S->VREGRADIO.DCDCEN = (REGULATORS_VREGRADIO_DCDCEN_DCDCEN_Disabled << REGULATORS_VREGRADIO_DCDCEN_DCDCEN_Pos);
-    NRF_REGULATORS_S->VREGMAIN.DCDCEN  = (REGULATORS_VREGMAIN_DCDCEN_DCDCEN_Disabled << REGULATORS_VREGMAIN_DCDCEN_DCDCEN_Pos);
-    NRF_REGULATORS_S->VREGH.DCDCEN     = (REGULATORS_VREGH_DCDCEN_DCDCEN_Disabled << REGULATORS_VREGH_DCDCEN_DCDCEN_Pos);
-
-    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_MUTEX);
-
-    // Map P0.29 to network core
-    NRF_P0_S->PIN_CNF[29] = GPIO_PIN_CNF_MCUSEL_NetworkMCU << GPIO_PIN_CNF_MCUSEL_Pos;
-
-    // Map P1.0-9 to network core
-    for (uint8_t pin = 0; pin < 10; pin++) {
-        NRF_P1_S->PIN_CNF[pin] = GPIO_PIN_CNF_MCUSEL_NetworkMCU << GPIO_PIN_CNF_MCUSEL_Pos;
-    }
-
-    tz_configure_ram_non_secure(3, 1);
-
-    NRF_IPC_S->INTENSET                       = 1 << IPC_CHAN_RADIO_RX;
-    NRF_IPC_S->SEND_CNF[IPC_CHAN_REQ]         = 1 << IPC_CHAN_REQ;
-    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_RADIO_RX] = 1 << IPC_CHAN_RADIO_RX;
-    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_STOP]     = 1 << IPC_CHAN_STOP;
-
-    NVIC_EnableIRQ(IPC_IRQn);
-    NVIC_ClearPendingIRQ(IPC_IRQn);
-    NVIC_SetPriority(IPC_IRQn, IPC_IRQ_PRIORITY);
-
-    // Start the network core
-    release_network_core();
-
-    if (callback) {
-        _radio_callback = callback;
-    }
+void radio_init(radio_ble_mode_t mode) {
 
     ipc_shared_data.radio.mode = mode;
     ipc_network_call(IPC_RADIO_INIT_REQ);
@@ -99,18 +63,4 @@ int8_t radio_rssi(void) {
 
 void radio_disable(void) {
     ipc_network_call(IPC_RADIO_DIS_REQ);
-}
-
-//=========================== interrupt handlers ===============================
-
-void IPC_IRQHandler(void) {
-
-    if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_RADIO_RX]) {
-        NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_RADIO_RX] = 0;
-        if (_radio_callback) {
-            mutex_lock();
-            _radio_callback((uint8_t *)ipc_shared_data.radio.rx_pdu.buffer, ipc_shared_data.radio.rx_pdu.length);
-            mutex_unlock();
-        }
-    }
 }

@@ -47,7 +47,7 @@ typedef void (*radio_cb_t)(uint8_t *packet, uint8_t length);  ///< Function poin
  * @param[in] mode     BLE mode used by the radio (1MBit, 2MBit, LR125KBit, LR500Kbit)
  *
  */
-void radio_init(radio_cb_t callback, radio_ble_mode_t mode);
+void radio_init(radio_ble_mode_t mode);
 
 /**
  * @brief Set the tx-rx frequency of the radio, by the following formula

@@ -35,10 +35,12 @@ typedef enum {
 } ipc_req_t;
 
 typedef enum {
-    IPC_CHAN_REQ      = 0,  ///< Channel used for request events
-    IPC_CHAN_RADIO_RX = 1,  ///< Channel used for radio RX events
-    IPC_CHAN_STOP     = 2,  ///< Channel used for stopping the experiment
-    IPC_CHAN_LOG      = 3,  ///< Channel used for logging events
+    IPC_CHAN_REQ        = 0,  ///< Channel used for request events
+    IPC_CHAN_RADIO_RX   = 1,  ///< Channel used for radio RX events
+    IPC_CHAN_STOP       = 2,  ///< Channel used for stopping the experiment
+    IPC_CHAN_LOG        = 3,  ///< Channel used for logging events
+    IPC_CHAN_OTA_ERASE  = 4, ///< Channel used for erasing the non secure partition
+    IPC_CHAN_OTA_CHUNK  = 5, ///< Channel used for writing a non secure image chunk
 } ipc_channels_t;
 
 typedef struct __attribute__((packed)) {
@@ -58,15 +60,23 @@ typedef struct __attribute__((packed)) {
 
 typedef struct __attribute__((packed)) {
     uint8_t length;
-    uint8_t data[127];
+    uint8_t data[INT8_MAX];
 } ipc_log_data_t;
 
 typedef struct __attribute__((packed)) {
-    bool             net_ready;  ///< Network core is ready
-    bool             net_ack;    ///< Network core acked the latest request
-    ipc_req_t        req;        ///< IPC network request
-    ipc_log_data_t   log;        ///< Log data
-    ipc_radio_data_t radio;      ///< Radio shared data
+    uint32_t image_size;
+    uint32_t chunk_index;
+    uint32_t chunk_size;
+    uint8_t chunk[INT8_MAX + 1];
+} ipc_ota_data_t;
+
+typedef struct __attribute__((packed)) {
+    bool             net_ready; ///< Network core is ready
+    bool             net_ack;   ///< Network core acked the latest request
+    ipc_req_t        req;       ///< IPC network request
+    ipc_log_data_t   log;       ///< Log data
+    ipc_ota_data_t   ota;       ///< OTA data
+    ipc_radio_data_t radio;     ///< Radio shared data
 } ipc_shared_data_t;
 
 /**

@@ -11,6 +11,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <nrf.h>
+
+#include "clock.h"
 #include "fault_handlers.h"
 
 extern __NO_RETURN int main(void);
@@ -294,6 +296,14 @@ void Reset_Handler(void) {
     }
 
     SystemInit();
+
+    hfclk_init();
+
+    // Disable all DCDC regulators (use LDO)
+    NRF_REGULATORS_S->VREGRADIO.DCDCEN = (REGULATORS_VREGRADIO_DCDCEN_DCDCEN_Disabled << REGULATORS_VREGRADIO_DCDCEN_DCDCEN_Pos);
+    NRF_REGULATORS_S->VREGMAIN.DCDCEN  = (REGULATORS_VREGMAIN_DCDCEN_DCDCEN_Disabled << REGULATORS_VREGMAIN_DCDCEN_DCDCEN_Pos);
+    NRF_REGULATORS_S->VREGH.DCDCEN     = (REGULATORS_VREGH_DCDCEN_DCDCEN_Disabled << REGULATORS_VREGH_DCDCEN_DCDCEN_Pos);
+
     main();
 }
 

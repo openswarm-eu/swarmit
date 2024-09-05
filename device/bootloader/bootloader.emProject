@@ -57,7 +57,7 @@
       link_time_optimization="No"
       linker_additional_options="--gc-sections"
       linker_memory_map_file="$(ProjectDir)/Setup/MemoryMap.xml"
-      linker_output_format="hex"
+      linker_output_format="bin"
       linker_post_build_command="cp $(ProjectDir)/Output/$(Configuration)/Exe/cmse_implib.a $(ProjectDir)/../../sample/."
       linker_printf_fmt_level="int"
       linker_printf_fp_enabled="Float"
@@ -73,16 +73,20 @@
       <file file_name="Setup/MemoryMap.xml" />
     </folder>
     <folder Name="Source">
-      <file file_name="Source/clock.h" />
-      <file file_name="Source/clock.c" />
       <file file_name="Source/ipc.h" />
+      <file file_name="Source/ipc.c" />
       <file file_name="Source/main.c" />
+      <file file_name="Source/nvmc.h" />
+      <file file_name="Source/nvmc.c" />
+      <file file_name="Source/protocol.h" />
       <file file_name="Source/radio.c" />
       <file file_name="Source/radio.h" />
       <file file_name="Source/tz.h" />
       <file file_name="Source/tz.c" />
     </folder>
     <folder Name="System">
+      <file file_name="System/clock.h" />
+      <file file_name="System/clock.c" />
       <file file_name="System/fault_handlers.c" />
       <file file_name="System/fault_handlers.h" />
       <file file_name="System/startup.c" />

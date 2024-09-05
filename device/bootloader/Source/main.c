@@ -15,8 +15,24 @@
 #include <arm_cmse.h>
 #include <nrf.h>
 
+#include "ipc.h"
+#include "nvmc.h"
+#include "protocol.h"
 #include "radio.h"
 #include "tz.h"
+
+#define SWARMIT_BASE_ADDRESS    (0x00004000);
+
+extern ipc_shared_data_t ipc_shared_data;
+
+typedef struct {
+    uint8_t     notification_buffer[255];
+    uint32_t    base_addr;
+    bool        ota_erase_request;
+    bool        ota_chunk_request;
+} bootloader_app_data_t;
+
+static bootloader_app_data_t _bootloader_vars = { 0 };
 
 __attribute__((cmse_nonsecure_entry)) void reload_wdt0(void);
 
@@ -31,7 +47,19 @@ typedef struct {
     reset_handler_t reset_handler; ///< Reset handler
 } vector_table_t;
 
-static vector_table_t *table = (vector_table_t *)0x00004000; // Image should start with vector table
+static vector_table_t *table = (vector_table_t *)SWARMIT_BASE_ADDRESS; // Image should start with vector table
+
+static void setup_watchdog1(void) {
+
+    // Configuration: keep running while sleeping + pause when halted by debugger
+    NRF_WDT1_S->CONFIG = (WDT_CONFIG_SLEEP_Run << WDT_CONFIG_SLEEP_Pos);
+
+    // Enable reload register 0
+    NRF_WDT1_S->RREN = WDT_RREN_RR0_Enabled << WDT_RREN_RR0_Pos;
+
+    // Configure timeout and callback
+    NRF_WDT1_S->CRV = 32768 - 1;
+}
 
 static void setup_watchdog0(void) {
 
@@ -45,18 +73,6 @@ static void setup_watchdog0(void) {
     // Configure timeout and callback
     NRF_WDT0_S->CRV = 32768 - 1;
     NRF_WDT0_S->TASKS_START = WDT_TASKS_START_TASKS_START_Trigger << WDT_TASKS_START_TASKS_START_Pos;
-}
-
-static void setup_watchdog1(void) {
-
-    // Configuration: keep running while sleeping + pause when halted by debugger
-    NRF_WDT1_S->CONFIG = (WDT_CONFIG_SLEEP_Run << WDT_CONFIG_SLEEP_Pos);
-
-    // Enable reload register 0
-    NRF_WDT1_S->RREN = WDT_RREN_RR0_Enabled << WDT_RREN_RR0_Pos;
-
-    // Configure timeout and callback
-    NRF_WDT1_S->CRV = 32768 - 1;
 }
 
 static void setup_ns_user(void) {
@@ -87,11 +103,6 @@ static void setup_ns_user(void) {
     tz_configure_ram_secure(0, 3);
     // Configure non secure RAM
     tz_configure_ram_non_secure(4, 48);
-
-    // First flash region (16kiB) is secure and contains the bootloader
-    tz_configure_flash_secure(0, 1);
-    // Configure non secure flash address space
-    tz_configure_flash_non_secure(1, 63);
 
     // Configure Non Secure Callable subregion
     NRF_SPU_S->FLASHNSC[0].REGION = 0;
@@ -169,9 +180,9 @@ static void setup_ns_user(void) {
     __ISB(); // Flush and refill pipeline with updated permissions
 }
 
-static const uint8_t swrmt_preamble[] = {
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07
-};
+uint64_t _deviceid(void) {
+    return ((uint64_t)NRF_FICR_S->INFO.DEVICEID[1]) << 32 | (uint64_t)NRF_FICR_S->INFO.DEVICEID[0];
+}
 
 static void _radio_callback(uint8_t *packet, uint8_t length) {
     (void)length;
@@ -194,8 +205,40 @@ int main(void) {
     NRF_DPPIC_NS->CHENSET = (DPPIC_CHENSET_CH0_Enabled << DPPIC_CHENSET_CH0_Pos);
     NRF_DPPIC_S->CHENSET = (DPPIC_CHENSET_CH0_Enabled << DPPIC_CHENSET_CH0_Pos);
 
+    // First flash region (16kiB) is secure and contains the bootloader
+    tz_configure_flash_secure(0, 1);
+    // Configure non secure flash address space
+    tz_configure_flash_non_secure(1, 63);
+
+    // Management code
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_MUTEX);
+
+    // Map P0.29 to network core
+    NRF_P0_S->PIN_CNF[29] = GPIO_PIN_CNF_MCUSEL_NetworkMCU << GPIO_PIN_CNF_MCUSEL_Pos;
+
+    // Map P1.0-9 to network core
+    for (uint8_t pin = 0; pin < 10; pin++) {
+        NRF_P1_S->PIN_CNF[pin] = GPIO_PIN_CNF_MCUSEL_NetworkMCU << GPIO_PIN_CNF_MCUSEL_Pos;
+    }
+
+    tz_configure_ram_non_secure(3, 1);
+
+    NRF_IPC_S->INTENSET                         = (1 << IPC_CHAN_RADIO_RX | 1 << IPC_CHAN_OTA_ERASE | 1 << IPC_CHAN_OTA_CHUNK);
+    NRF_IPC_S->SEND_CNF[IPC_CHAN_REQ]           = 1 << IPC_CHAN_REQ;
+    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_RADIO_RX]   = 1 << IPC_CHAN_RADIO_RX;
+    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_STOP]       = 1 << IPC_CHAN_STOP;
+    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_OTA_ERASE]  = 1 << IPC_CHAN_OTA_ERASE;
+    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_OTA_CHUNK]  = 1 << IPC_CHAN_OTA_CHUNK;
+
+    NVIC_EnableIRQ(IPC_IRQn);
+    NVIC_ClearPendingIRQ(IPC_IRQn);
+    NVIC_SetPriority(IPC_IRQn, IPC_IRQ_PRIORITY);
+
+    // Start the network core
+    release_network_core();
+
     // Network core must remain on
-    radio_init(&_radio_callback, RADIO_BLE_1MBit);
+    radio_init(RADIO_BLE_1MBit);
     radio_set_frequency(8);
     radio_rx();
 
@@ -225,9 +268,75 @@ int main(void) {
         while (1) {}
     }
 
-    // Management code
+    _bootloader_vars.base_addr = SWARMIT_BASE_ADDRESS;
     NRF_P0_S->DIRSET = (1 << 31);
+
     while (1) {
         __WFE();
+
+        if (_bootloader_vars.ota_erase_request) {
+            NRF_P0_S->OUT ^= (1 << 31);
+            _bootloader_vars.ota_erase_request = false;
+
+            // Erase non secure flash
+            uint32_t pages_count = (ipc_shared_data.ota.image_size / FLASH_PAGE_SIZE) + (ipc_shared_data.ota.image_size % FLASH_PAGE_SIZE != 0);
+            printf("Pages to erase: %u\n", pages_count);
+            for (uint32_t page = 0; page < pages_count; page++) {
+                uint32_t addr = _bootloader_vars.base_addr + page * FLASH_PAGE_SIZE;
+                printf("Erasing page %u at %p\n", page, addr);
+                nvmc_page_erase(page + 4);
+            }
+            printf("Erasing done\n");
+
+            // Notify erase is done
+            swrmt_notification_t notification = {
+                .device_id = _deviceid(),
+                .type = SWRMT_NOTIFICATION_OTA_START_ACK,
+            };
+            radio_disable();
+            radio_tx((uint8_t *)&notification, sizeof(swrmt_notification_t));
+        }
+
+        if (_bootloader_vars.ota_chunk_request) {
+            _bootloader_vars.ota_chunk_request = false;
+
+            // Write chunk to flash
+            uint32_t addr = _bootloader_vars.base_addr + ipc_shared_data.ota.chunk_index * SWRMT_OTA_CHUNK_SIZE;
+            printf("Writing chunk %d at address %p\n", ipc_shared_data.ota.chunk_index, addr);
+            nvmc_write((uint32_t *)addr, ipc_shared_data.ota.chunk, ipc_shared_data.ota.chunk_size);
+
+            // Notify chunk has been written
+            swrmt_notification_t notification = {
+                .device_id = _deviceid(),
+                .type = SWRMT_NOTIFICATION_OTA_CHUNK_ACK,
+            };
+
+            memcpy(_bootloader_vars.notification_buffer, &notification, sizeof(swrmt_notification_t));
+            memcpy(_bootloader_vars.notification_buffer + sizeof(swrmt_notification_t), &ipc_shared_data.ota.chunk_index, sizeof(uint32_t));
+            radio_disable();
+            radio_tx(_bootloader_vars.notification_buffer, sizeof(swrmt_notification_t) + sizeof(uint32_t));
+        }
+    }
+}
+
+//=========================== interrupt handlers ===============================
+
+void IPC_IRQHandler(void) {
+
+    if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_RADIO_RX]) {
+        NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_RADIO_RX] = 0;
+        mutex_lock();
+        _radio_callback((uint8_t *)ipc_shared_data.radio.rx_pdu.buffer, ipc_shared_data.radio.rx_pdu.length);
+        mutex_unlock();
+    }
+
+    if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_OTA_ERASE]) {
+        NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_OTA_ERASE] = 0;
+        _bootloader_vars.ota_erase_request = true;
+    }
+
+    if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_OTA_CHUNK]) {
+        NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_OTA_CHUNK] = 0;
+        _bootloader_vars.ota_chunk_request = true;
     }
 }

@@ -14,7 +14,6 @@
 #include <nrf.h>
 // Include BSP headers
 #include "ipc.h"
-#include "nvmc.h"
 #include "protocol.h"
 #include "radio.h"
 
@@ -30,7 +29,6 @@ typedef struct {
     ipc_req_t   ipc_req;
     bool        ipc_log_received;
     uint8_t     gpio_event_idx;
-    uint32_t    base_addr;
     uint8_t     hash[SWRMT_OTA_SHA256_LENGTH];
 } swrmt_app_data_t;
 
@@ -55,7 +53,7 @@ static void _radio_callback(uint8_t *packet, uint8_t length) {
 
     uint8_t *ptr = packet + SWRMT_PREAMBLE_LENGTH;
 
-    if (*ptr == SWRMT_REQ_START) {
+    if (*ptr == SWRMT_REQ_EXPERIMENT_START) {
         mutex_lock();
         ipc_shared_data.radio.rx_pdu.length = length;
         memcpy((void *)ipc_shared_data.radio.rx_pdu.buffer, packet, length);
@@ -93,60 +91,22 @@ uint8_t _gpio_read(uint8_t pin) {
     return (NRF_P1_NS->IN & (1 << pin)) ? 1 : 0;
 }
 
-void _ota_start(const swrmt_ota_start_pkt_t *pkt) {
-    // Reset user image base address
-    _app_vars.base_addr = SWRMT_USER_IMAGE_BASE_ADDRESS;
-
-    // Copy expected hash
-     memcpy(_app_vars.hash, pkt->hash, SWRMT_OTA_SHA256_LENGTH);
-
-    // Erase the corresponding flash pages.
-    uint32_t pages_count = (pkt->image_size / FLASH_PAGE_SIZE) + (pkt->image_size % FLASH_PAGE_SIZE != 0);
-    printf("Pages to erase: %u\n", pages_count);
-    for (uint32_t page = 4; page < pages_count + 4; page++) {
-        uint32_t addr = _app_vars.base_addr + page * FLASH_PAGE_SIZE;
-        printf("Erasing page %u at %p\n", page, addr);
-        nvmc_page_erase(page);
-    }
-
-    // Notify erase is done
-    radio_disable();
-    swrmt_notification_t notification = {
-        .device_id = _deviceid(),
-        .type = SWRMT_NOTIFICATION_OTA_START_ACK,
-    };
-    radio_tx((uint8_t *)&notification, sizeof(swrmt_notification_t));
-}
-
-void _ota_write_chunk(const swrmt_ota_chunk_pkt_t *pkt) {
-    // Write chunk to flash
-    uint32_t addr = _app_vars.base_addr + pkt->index * SWRMT_OTA_CHUNK_SIZE;
-    nvmc_write((uint32_t *)addr, pkt->chunk, pkt->chunk_size);
-
-    // Notify chunk has been written
-    radio_disable();
-    swrmt_notification_t notification = {
-        .device_id = _deviceid(),
-        .type = SWRMT_NOTIFICATION_OTA_CHUNK_ACK,
-    };
-
-    memcpy(_app_vars.notification_buffer, &notification, sizeof(swrmt_notification_t));
-    memcpy(_app_vars.notification_buffer + sizeof(swrmt_notification_t), &pkt->index, sizeof(uint32_t));
-    radio_tx(_app_vars.notification_buffer, sizeof(swrmt_notification_t) + sizeof(uint32_t));
-}
-
 //=========================== main ==============================================
 
 int main(void) {
 
+    uint64_t device_id = _deviceid();
+    (void)device_id;
     // Configure constant latency mode for better performances
     NRF_POWER_NS->TASKS_CONSTLAT = 1;
 
-    NRF_IPC_NS->INTENSET                    = 1 << IPC_CHAN_REQ;
-    NRF_IPC_NS->SEND_CNF[IPC_CHAN_RADIO_RX] = 1 << IPC_CHAN_RADIO_RX;
-    NRF_IPC_NS->SEND_CNF[IPC_CHAN_STOP]     = 1 << IPC_CHAN_STOP;
-    NRF_IPC_NS->RECEIVE_CNF[IPC_CHAN_REQ]   = 1 << IPC_CHAN_REQ;
-    NRF_IPC_NS->RECEIVE_CNF[IPC_CHAN_LOG]   = 1 << IPC_CHAN_LOG;
+    NRF_IPC_NS->INTENSET                        = 1 << IPC_CHAN_REQ;
+    NRF_IPC_NS->SEND_CNF[IPC_CHAN_RADIO_RX]     = 1 << IPC_CHAN_RADIO_RX;
+    NRF_IPC_NS->SEND_CNF[IPC_CHAN_STOP]         = 1 << IPC_CHAN_STOP;
+    NRF_IPC_NS->SEND_CNF[IPC_CHAN_OTA_ERASE]    = 1 << IPC_CHAN_OTA_ERASE;
+    NRF_IPC_NS->SEND_CNF[IPC_CHAN_OTA_CHUNK]    = 1 << IPC_CHAN_OTA_CHUNK;
+    NRF_IPC_NS->RECEIVE_CNF[IPC_CHAN_REQ]       = 1 << IPC_CHAN_REQ;
+    NRF_IPC_NS->RECEIVE_CNF[IPC_CHAN_LOG]       = 1 << IPC_CHAN_LOG;
 
     NVIC_EnableIRQ(IPC_IRQn);
     NVIC_ClearPendingIRQ(IPC_IRQn);
@@ -175,21 +135,35 @@ int main(void) {
             _app_vars.req_received = false;
             swrmt_request_t *req = (swrmt_request_t *)_app_vars.req_buffer;
             switch (req->type) {
-                case SWRMT_REQ_START:
+                case SWRMT_REQ_EXPERIMENT_START:
                     NRF_IPC_NS->TASKS_SEND[IPC_CHAN_RADIO_RX] = 1;
                     break;
-                case SWRMT_REQ_STOP:
+                case SWRMT_REQ_EXPERIMENT_STOP:
                     NRF_IPC_NS->TASKS_SEND[IPC_CHAN_STOP] = 1;
                     break;
                 case SWRMT_REQ_OTA_START:
                 {
                     const swrmt_ota_start_pkt_t *pkt = (const swrmt_ota_start_pkt_t *)req->data;
-                    _ota_start(pkt);
+                    // Copy expected hash
+                    memcpy(_app_vars.hash, pkt->hash, SWRMT_OTA_SHA256_LENGTH);
+
+                    // Erase the corresponding flash pages.
+                    mutex_lock();
+                    ipc_shared_data.ota.image_size = pkt->image_size;
+                    mutex_unlock();
+                    NRF_IPC_NS->TASKS_SEND[IPC_CHAN_OTA_ERASE] = 1;
+
+                    NRF_P0_NS->OUT ^= (1 << 29);
                 } break;
                 case SWRMT_REQ_OTA_CHUNK:
                 {
                     const swrmt_ota_chunk_pkt_t *pkt = (const swrmt_ota_chunk_pkt_t *)req->data;
-                    _ota_write_chunk(pkt);
+                    mutex_lock();
+                    ipc_shared_data.ota.chunk_index = pkt->index;
+                    ipc_shared_data.ota.chunk_size = pkt->chunk_size;
+                    memcpy((uint8_t *)ipc_shared_data.ota.chunk, pkt->chunk, pkt->chunk_size);
+                    mutex_unlock();
+                    NRF_IPC_NS->TASKS_SEND[IPC_CHAN_OTA_CHUNK] = 1;
                 } break;
                 default:
                     break;

@@ -37,10 +37,12 @@ typedef enum {
 } ipc_req_t;
 
 typedef enum {
-    IPC_CHAN_REQ      = 0,  ///< Channel used for request events
-    IPC_CHAN_RADIO_RX = 1,  ///< Channel used for radio RX events
-    IPC_CHAN_STOP     = 2,  ///< Channel used for stopping the experiment
-    IPC_CHAN_LOG      = 3,  ///< Channel used for logging events
+    IPC_CHAN_REQ        = 0,  ///< Channel used for request events
+    IPC_CHAN_RADIO_RX   = 1,  ///< Channel used for radio RX events
+    IPC_CHAN_STOP       = 2,  ///< Channel used for stopping the experiment
+    IPC_CHAN_LOG        = 3,  ///< Channel used for logging events
+    IPC_CHAN_OTA_ERASE  = 4, ///< Channel used for erasing the non secure partition
+    IPC_CHAN_OTA_CHUNK  = 5, ///< Channel used for writing a non secure image chunk
 } ipc_channels_t;
 
 typedef struct __attribute__((packed)) {
@@ -60,62 +62,34 @@ typedef struct __attribute__((packed)) {
 
 typedef struct __attribute__((packed)) {
     uint8_t length;
-    uint8_t data[127];
+    uint8_t data[INT8_MAX];
 } ipc_log_data_t;
 
 typedef struct __attribute__((packed)) {
-    bool             net_ready;  ///< Network core is ready
-    bool             net_ack;    ///< Network core acked the latest request
-    ipc_req_t        req;        ///< IPC network request
-    ipc_log_data_t   log;        ///< Log data
-    ipc_radio_data_t radio;      ///< Radio shared data
+    uint32_t image_size;
+    uint32_t chunk_index;
+    uint32_t chunk_size;
+    uint8_t chunk[INT8_MAX + 1];
+} ipc_ota_data_t;
+
+typedef struct __attribute__((packed)) {
+    bool             net_ready; ///< Network core is ready
+    bool             net_ack;   ///< Network core acked the latest request
+    ipc_req_t        req;       ///< IPC network request
+    ipc_log_data_t   log;       ///< Log data
+    ipc_ota_data_t   ota;       ///< OTA data
+    ipc_radio_data_t radio;     ///< Radio shared data
 } ipc_shared_data_t;
 
-/**
- * @brief Variable in RAM containing the shared data structure
- */
-volatile __attribute__((section(".shared_data"))) ipc_shared_data_t ipc_shared_data;
-
-/**
- * @brief Lock the mutex, blocks until the mutex is locked
- */
-static inline void mutex_lock(void) {
-    while (NRF_MUTEX_NS->MUTEX[0]) {}
-}
+void mutex_lock(void);
 
 /**
  * @brief Unlock the mutex, has no effect if the mutex is already unlocked
  */
-static inline void mutex_unlock(void) {
-    NRF_MUTEX_NS->MUTEX[0] = 0;
-}
+void mutex_unlock(void);
 
-static inline void ipc_network_call(ipc_req_t req) {
-    if (req != IPC_REQ_NONE) {
-        ipc_shared_data.req                 = req;
-        NRF_IPC_S->TASKS_SEND[IPC_CHAN_REQ] = 1;
-    }
-    while (!ipc_shared_data.net_ack) {}
-    ipc_shared_data.net_ack = false;
-};
+void ipc_network_call(ipc_req_t req);
 
-static inline void release_network_core(void) {
-    // Do nothing if network core is already started and ready
-    if (!NRF_RESET_S->NETWORK.FORCEOFF && ipc_shared_data.net_ready) {
-        return;
-    } else if (!NRF_RESET_S->NETWORK.FORCEOFF) {
-        ipc_shared_data.net_ready = false;
-    }
-
-    NRF_RESET_S->NETWORK.FORCEOFF = (RESET_NETWORK_FORCEOFF_FORCEOFF_Release << RESET_NETWORK_FORCEOFF_FORCEOFF_Pos);
-
-    while (!ipc_shared_data.net_ready) {}
-}
-
-__attribute__((cmse_nonsecure_entry)) void log_data(uint8_t *data, size_t length) {
-    ipc_shared_data.log.length = length;
-    memcpy((void *)ipc_shared_data.log.data, data, length);
-    NRF_IPC_S->TASKS_SEND[IPC_CHAN_LOG] = 1;
-}
+void release_network_core(void);
 
 #endif
