@@ -40,8 +40,11 @@ int main(void) {
     NRF_DPPIC_NS->CHENSET = (DPPIC_CHENSET_CH0_Disabled << DPPIC_CHENSET_CH0_Pos);
 
     while (1) {
-        delay_ms(200);
+        delay_ms(500);
         reload_wdt0();
+        // Crash on purpose
+        //uint32_t *addr = 0x0;
+        //*addr = 0xdead;
         NRF_P0_NS->OUT ^= (1 << 30);
     };
 }

@@ -25,13 +25,4 @@
     <ProgramSection alignment="8" size="__STACKSIZE__" load="No" place_from_segment_end="Yes" name=".stack" />
     <ProgramSection alignment="8" size="__STACKSIZE_PROCESS__" load="No" name=".stack_process" />
   </MemorySegment>
-  <MemorySegment name="$(FLASH2_NAME:FLASH2)">
-    <ProgramSection alignment="4" load="Yes" name=".text2" />
-    <ProgramSection alignment="4" load="Yes" name=".rodata2" />
-    <ProgramSection alignment="4" load="Yes" runin=".data2_run" name=".data2" />
-  </MemorySegment>
-  <MemorySegment name="$(RAM2_NAME:RAM2)">
-    <ProgramSection alignment="4" load="No" name=".data2_run" />
-    <ProgramSection alignment="4" load="No" name=".bss2" />
-  </MemorySegment>
 </Root>
