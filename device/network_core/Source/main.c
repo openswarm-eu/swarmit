@@ -52,16 +52,7 @@ static void _radio_callback(uint8_t *packet, uint8_t length) {
     }
 
     uint8_t *ptr = packet + SWRMT_PREAMBLE_LENGTH;
-
-    if (*ptr == SWRMT_REQ_EXPERIMENT_START) {
-        mutex_lock();
-        ipc_shared_data.radio.rx_pdu.length = length;
-        memcpy((void *)ipc_shared_data.radio.rx_pdu.buffer, packet, length);
-        mutex_unlock();
-    }
-
     memcpy(_app_vars.req_buffer, ptr, length - SWRMT_PREAMBLE_LENGTH);
-
     _app_vars.req_received = true;
 }
 
@@ -76,15 +67,14 @@ uint64_t _deviceid(void) {
 
 void _gpio_init(uint8_t pin) {
     NRF_P1_NS->PIN_CNF[pin] = 0;
-    NRF_P1_NS->PIN_CNF[pin] |= (GPIO_PIN_CNF_PULL_Pulldown << GPIO_PIN_CNF_PULL_Pos);
     NRF_P1_NS->PIN_CNF[pin] &= ~(1UL << GPIO_PIN_CNF_INPUT_Pos);
-    NVIC_EnableIRQ(GPIOTE_IRQn);
+    NRF_P1_NS->PIN_CNF[pin] |= (GPIO_PIN_CNF_PULL_Pulldown << GPIO_PIN_CNF_PULL_Pos);
 
     NRF_GPIOTE_NS->CONFIG[pin] = (GPIOTE_CONFIG_MODE_Event << GPIOTE_CONFIG_MODE_Pos) |
                                     (pin << GPIOTE_CONFIG_PSEL_Pos) |
                                     (1 << GPIOTE_CONFIG_PORT_Pos) |
                                     (GPIOTE_CONFIG_POLARITY_Toggle << GPIOTE_CONFIG_POLARITY_Pos);
-    NRF_GPIOTE_NS->INTENSET |= (GPIOTE_INTENSET_IN0_Msk << pin);
+    NRF_GPIOTE_NS->INTENSET |= (1 << pin);
 }
 
 uint8_t _gpio_read(uint8_t pin) {
@@ -100,13 +90,13 @@ int main(void) {
     // Configure constant latency mode for better performances
     NRF_POWER_NS->TASKS_CONSTLAT = 1;
 
-    NRF_IPC_NS->INTENSET                        = 1 << IPC_CHAN_REQ;
-    NRF_IPC_NS->SEND_CNF[IPC_CHAN_RADIO_RX]     = 1 << IPC_CHAN_RADIO_RX;
-    NRF_IPC_NS->SEND_CNF[IPC_CHAN_STOP]         = 1 << IPC_CHAN_STOP;
-    NRF_IPC_NS->SEND_CNF[IPC_CHAN_OTA_ERASE]    = 1 << IPC_CHAN_OTA_ERASE;
-    NRF_IPC_NS->SEND_CNF[IPC_CHAN_OTA_CHUNK]    = 1 << IPC_CHAN_OTA_CHUNK;
-    NRF_IPC_NS->RECEIVE_CNF[IPC_CHAN_REQ]       = 1 << IPC_CHAN_REQ;
-    NRF_IPC_NS->RECEIVE_CNF[IPC_CHAN_LOG]       = 1 << IPC_CHAN_LOG;
+    NRF_IPC_NS->INTENSET                            = (1 << IPC_CHAN_REQ) | (1 << IPC_CHAN_LOG_EVENT);
+    NRF_IPC_NS->SEND_CNF[IPC_CHAN_EXPERIMENT_START] = 1 << IPC_CHAN_EXPERIMENT_START;
+    NRF_IPC_NS->SEND_CNF[IPC_CHAN_EXPERIMENT_STOP]  = 1 << IPC_CHAN_EXPERIMENT_STOP;
+    NRF_IPC_NS->SEND_CNF[IPC_CHAN_OTA_START]        = 1 << IPC_CHAN_OTA_START;
+    NRF_IPC_NS->SEND_CNF[IPC_CHAN_OTA_CHUNK]        = 1 << IPC_CHAN_OTA_CHUNK;
+    NRF_IPC_NS->RECEIVE_CNF[IPC_CHAN_REQ]           = 1 << IPC_CHAN_REQ;
+    NRF_IPC_NS->RECEIVE_CNF[IPC_CHAN_LOG_EVENT]     = 1 << IPC_CHAN_LOG_EVENT;
 
     NVIC_EnableIRQ(IPC_IRQn);
     NVIC_ClearPendingIRQ(IPC_IRQn);
@@ -123,6 +113,7 @@ int main(void) {
     NRF_TIMER0_NS->TASKS_START = 1;
 
     // Initialize monitoring gpios
+    NVIC_EnableIRQ(GPIOTE_IRQn);
     for (uint8_t pin = 0; pin < 5; pin++) {
         _gpio_init(pin);
     }
@@ -131,15 +122,16 @@ int main(void) {
 
     while (1) {
         __WFE();
+
         if (_app_vars.req_received) {
             _app_vars.req_received = false;
             swrmt_request_t *req = (swrmt_request_t *)_app_vars.req_buffer;
             switch (req->type) {
                 case SWRMT_REQ_EXPERIMENT_START:
-                    NRF_IPC_NS->TASKS_SEND[IPC_CHAN_RADIO_RX] = 1;
+                    NRF_IPC_NS->TASKS_SEND[IPC_CHAN_EXPERIMENT_START] = 1;
                     break;
                 case SWRMT_REQ_EXPERIMENT_STOP:
-                    NRF_IPC_NS->TASKS_SEND[IPC_CHAN_STOP] = 1;
+                    NRF_IPC_NS->TASKS_SEND[IPC_CHAN_EXPERIMENT_STOP] = 1;
                     break;
                 case SWRMT_REQ_OTA_START:
                 {
@@ -151,7 +143,7 @@ int main(void) {
                     mutex_lock();
                     ipc_shared_data.ota.image_size = pkt->image_size;
                     mutex_unlock();
-                    NRF_IPC_NS->TASKS_SEND[IPC_CHAN_OTA_ERASE] = 1;
+                    NRF_IPC_NS->TASKS_SEND[IPC_CHAN_OTA_START] = 1;
 
                     NRF_P0_NS->OUT ^= (1 << 29);
                 } break;
@@ -164,6 +156,7 @@ int main(void) {
                     memcpy((uint8_t *)ipc_shared_data.ota.chunk, pkt->chunk, pkt->chunk_size);
                     mutex_unlock();
                     NRF_IPC_NS->TASKS_SEND[IPC_CHAN_OTA_CHUNK] = 1;
+                    NRF_P0_NS->OUT ^= (1 << 29);
                 } break;
                 default:
                     break;
@@ -205,6 +198,7 @@ int main(void) {
         }
 
         if (_app_vars.ipc_log_received) {
+            _app_vars.ipc_log_received = false;
             // Notify log data
             swrmt_notification_t notification = {
                 .device_id = _deviceid(),
@@ -219,6 +213,7 @@ int main(void) {
         }
 
         if (_app_vars.gpio_event_idx != 0xff) {
+            _app_vars.gpio_event_idx = 0xff;
             // Notify gpio event
             swrmt_notification_t notification = {
                 .device_id = _deviceid(),
@@ -248,9 +243,9 @@ void IPC_IRQHandler(void) {
         _app_vars.ipc_req                        = ipc_shared_data.req;
     }
 
-    if (NRF_IPC_NS->EVENTS_RECEIVE[IPC_CHAN_LOG]) {
-        NRF_IPC_NS->EVENTS_RECEIVE[IPC_CHAN_LOG] = 0;
-        _app_vars.ipc_log_received               = true;
+    if (NRF_IPC_NS->EVENTS_RECEIVE[IPC_CHAN_LOG_EVENT]) {
+        NRF_IPC_NS->EVENTS_RECEIVE[IPC_CHAN_LOG_EVENT] = 0;
+        _app_vars.ipc_log_received                     = true;
     }
 }
 

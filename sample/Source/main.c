@@ -15,6 +15,7 @@
 #include <nrf.h>
 
 void reload_wdt0(void);
+void log_data(uint8_t *data, size_t length);
 static bool _timer_running = false;
 
 static void delay_ms(uint32_t ms) {
@@ -29,6 +30,7 @@ static void delay_ms(uint32_t ms) {
 int main(void) {
     puts("Hello Non Secure World!");
     NRF_P0_NS->DIRSET = (1 << 30);
+    NRF_P0_NS->DIRSET = (1 << 25);
 
     NRF_TIMER0_NS->TASKS_CLEAR = 1;
     NRF_TIMER0_NS->PRESCALER   = 4;  // Run TIMER at 1MHz
@@ -40,12 +42,14 @@ int main(void) {
     NRF_DPPIC_NS->CHENSET = (DPPIC_CHENSET_CH0_Disabled << DPPIC_CHENSET_CH0_Pos);
 
     while (1) {
-        delay_ms(500);
+        delay_ms(200);
         reload_wdt0();
+        log_data((uint8_t *)"Logging", 7);
         // Crash on purpose
         //uint32_t *addr = 0x0;
         //*addr = 0xdead;
         NRF_P0_NS->OUT ^= (1 << 30);
+        NRF_P0_NS->OUT ^= (1 << 25);
     };
 }
 

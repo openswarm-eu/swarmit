@@ -14,6 +14,7 @@ import structlog
 from tqdm import tqdm
 from cryptography.hazmat.primitives import hashes
 
+from dotbot.logger import LOGGER
 from dotbot.hdlc import hdlc_encode, HDLCHandler, HDLCState
 from dotbot.protocol import PROTOCOL_VERSION
 from dotbot.serial_interface import SerialInterface, SerialInterfaceException
@@ -64,7 +65,7 @@ class SwarmitStartExperiment:
         self.serial = SerialInterface(port, baudrate, self.on_byte_received)
         self.hdlc_handler = HDLCHandler()
         self.start_ack_received = False
-        self.firmware = firmware
+        self.firmware = bytearray(firmware.read()) if firmware is not None else None
         self.last_acked_index = -1
         self.last_deviceid_ack = None
         self.chunks = []
@@ -165,14 +166,7 @@ class SwarmitStartExperiment:
         buffer += int(RequestType.SWARMIT_REQ_EXPERIMENT_START.value).to_bytes(
             length=1, byteorder="little"
         )
-        buffer += len(self.firmware).to_bytes(length=4, byteorder="little")
-        buffer += self.fw_hash
         self.serial.write(hdlc_encode(buffer))
-        timeout = 0  # ms
-        while self.start_ack_received is False and timeout < 10000:
-            timeout += 1
-            time.sleep(0.01)
-        return self.start_ack_received is True
 
 
 class SwarmitStopExperiment:
@@ -193,6 +187,41 @@ class SwarmitStopExperiment:
         self.serial.write(hdlc_encode(buffer))
 
 
+class SwarmitMonitorExperiment:
+    """Class used to monitor an experiment."""
+
+    def __init__(self, port, baudrate):
+        self.logger = LOGGER.bind(context=__name__)
+        self.hdlc_handler = HDLCHandler()
+        self.serial = SerialInterface(port, baudrate, self.on_byte_received)
+        self.last_deviceid_notification = None
+        # Just write a single byte to fake a DotBot gateway handshake
+        self.serial.write(int(PROTOCOL_VERSION).to_bytes(length=1))
+
+    def on_byte_received(self, byte):
+        if self.hdlc_handler is None:
+            return
+        self.hdlc_handler.handle_byte(byte)
+        if self.hdlc_handler.state == HDLCState.READY:
+            payload = self.hdlc_handler.payload
+            if not payload:
+                return
+            deviceid = int.from_bytes(payload[0:8], byteorder="little")
+            event = payload[8]
+            timestamp = int.from_bytes(payload[9:13], byteorder="little")
+            data_size = int(payload[13])
+            data = payload[14:data_size + 14]
+            logger = self.logger.bind(deviceid=hex(deviceid), notification=event, time=timestamp, data_size=data_size, data=data)
+            if event == NotificationType.SWARMIT_NOTIFICATION_EVENT_GPIO.value:
+                logger.info(f"GPIO event")
+            elif event == NotificationType.SWARMIT_NOTIFICATION_EVENT_LOG.value:
+                logger.info(f"LOG event")
+
+    def monitor(self):
+        while True:
+            time.sleep(0.01)
+
+
 @click.group()
 @click.option(
     "-p",
@@ -208,10 +237,6 @@ class SwarmitStopExperiment:
 )
 @click.pass_context
 def main(ctx, port, baudrate):
-    # Disable logging configure in PyDotBot
-    structlog.configure(
-        wrapper_class=structlog.make_filtering_bound_logger(logging.CRITICAL),
-    )
     ctx.ensure_object(dict)
     ctx.obj['port'] = port
     ctx.obj['baudrate'] = baudrate
@@ -224,14 +249,18 @@ def main(ctx, port, baudrate):
     is_flag=True,
     help="Start the experiment without prompt.",
 )
-@click.argument("firmware", type=click.File(mode="rb", lazy=True))
+@click.argument("firmware", type=click.File(mode="rb", lazy=True), required=False)
 @click.pass_context
 def start(ctx, yes, firmware):
+    # Disable logging configure in PyDotBot
+    structlog.configure(
+        wrapper_class=structlog.make_filtering_bound_logger(logging.CRITICAL),
+    )
     try:
         experiment = SwarmitStartExperiment(
             ctx.obj['port'],
             ctx.obj['baudrate'],
-            bytearray(firmware.read()),
+            firmware,
         )
     except (
         SerialInterfaceException,
@@ -239,35 +268,33 @@ def start(ctx, yes, firmware):
     ) as exc:
         print(f"Error: {exc}")
         return
-    print(f"Image size: {len(experiment.firmware)}B")
-    print("")
-    if yes is False:
-        click.confirm("Do you want to continue?", default=True, abort=True)
-    ret = experiment.init()
-    for device_id in DEVICES_IDS:
-        print(f"Preparing device {hex(device_id)}")
-        ret = experiment.start_ota(device_id)
-        if ret is False:
-            print(f"Error: No start acknowledgment received from {hex(device_id)}. Aborting.")
-            return
-        try:
-            experiment.transfer()
-        except Exception as exc:
-            print(f"Error during transfering image to {hex(device_id)}: {exc}")
-            return
+    if firmware is not None:
+        print(f"Image size: {len(experiment.firmware)}B")
+        print("")
+        if yes is False:
+            click.confirm("Do you want to continue?", default=True, abort=True)
+        ret = experiment.init()
+        for device_id in DEVICES_IDS:
+            print(f"Preparing device {hex(device_id)}")
+            ret = experiment.start_ota(device_id)
+            if ret is False:
+                print(f"Error: No start acknowledgment received from {hex(device_id)}. Aborting.")
+                return
+            try:
+                experiment.transfer()
+            except Exception as exc:
+                print(f"Error during transfering image to {hex(device_id)}: {exc}")
+                return
     experiment.start()
     print("Experiment started.")
 
 
 @main.command()
-@click.option(
-    "-y",
-    "--yes",
-    is_flag=True,
-    help="Force experiment stop.",
-)
 @click.pass_context
-def stop(ctx, yes):
+def stop(ctx):
+    structlog.configure(
+        wrapper_class=structlog.make_filtering_bound_logger(logging.CRITICAL),
+    )
     try:
         experiment = SwarmitStopExperiment(
             ctx.obj['port'],
@@ -280,6 +307,27 @@ def stop(ctx, yes):
         print(f"Error: {exc}")
         return
     experiment.stop()
+
+
+@main.command()
+@click.pass_context
+def monitor(ctx):
+    try:
+        experiment = SwarmitMonitorExperiment(
+            ctx.obj['port'],
+            ctx.obj['baudrate'],
+        )
+    except (
+        SerialInterfaceException,
+        serial.serialutil.SerialException,
+    ) as exc:
+        print(f"Error: {exc}")
+        return
+    try:
+        experiment.monitor()
+    except KeyboardInterrupt:
+        print("Stopping monitor.")
+
 
 if __name__ == '__main__':
     main(obj={})

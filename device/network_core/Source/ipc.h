@@ -35,12 +35,13 @@ typedef enum {
 } ipc_req_t;
 
 typedef enum {
-    IPC_CHAN_REQ        = 0,  ///< Channel used for request events
-    IPC_CHAN_RADIO_RX   = 1,  ///< Channel used for radio RX events
-    IPC_CHAN_STOP       = 2,  ///< Channel used for stopping the experiment
-    IPC_CHAN_LOG        = 3,  ///< Channel used for logging events
-    IPC_CHAN_OTA_ERASE  = 4, ///< Channel used for erasing the non secure partition
-    IPC_CHAN_OTA_CHUNK  = 5, ///< Channel used for writing a non secure image chunk
+    IPC_CHAN_REQ                = 0,    ///< Channel used for request events
+    IPC_CHAN_RADIO_RX           = 1,    ///< Channel used for radio RX events
+    IPC_CHAN_EXPERIMENT_START   = 2,    ///< Channel used for starting the experiment
+    IPC_CHAN_EXPERIMENT_STOP    = 3,    ///< Channel used for stopping the experiment
+    IPC_CHAN_LOG_EVENT          = 4,    ///< Channel used for logging events
+    IPC_CHAN_OTA_START          = 5,    ///< Channel used for starting an OTA process
+    IPC_CHAN_OTA_CHUNK          = 6,    ///< Channel used for writing a non secure image chunk
 } ipc_channels_t;
 
 typedef struct __attribute__((packed)) {

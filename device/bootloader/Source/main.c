@@ -28,8 +28,9 @@ extern ipc_shared_data_t ipc_shared_data;
 typedef struct {
     uint8_t     notification_buffer[255];
     uint32_t    base_addr;
-    bool        ota_erase_request;
+    bool        ota_start_request;
     bool        ota_chunk_request;
+    bool        start_experiment;
 } bootloader_app_data_t;
 
 static bootloader_app_data_t _bootloader_vars = { 0 };
@@ -79,8 +80,9 @@ static void setup_ns_user(void) {
 
     // Prioritize Secure exceptions over Non-Secure
     // Set non-banked exceptions to target Non-Secure
+    // Disable software reset
     uint32_t aircr = SCB->AIRCR & (~(SCB_AIRCR_VECTKEY_Msk));
-    aircr |= SCB_AIRCR_PRIS_Msk | SCB_AIRCR_BFHFNMINS_Msk;
+    aircr |= SCB_AIRCR_PRIS_Msk | SCB_AIRCR_BFHFNMINS_Msk | SCB_AIRCR_SYSRESETREQS_Msk;
     SCB->AIRCR = ((0x05FAUL << SCB_AIRCR_VECTKEY_Pos) & SCB_AIRCR_VECTKEY_Msk) | aircr;
 
     // Allow FPU in non secure
@@ -99,7 +101,7 @@ static void setup_ns_user(void) {
     SAU->CTRL = 0;;
     SAU->CTRL |= 1 << 1;  // Make all memory non secure
 
-    // Configure secure RAM. One RAM region takes 8KiB so secure RAM is 128KiB.
+    // Configure secure RAM. One RAM region takes 8KiB so secure RAM is 32KiB.
     tz_configure_ram_secure(0, 3);
     // Configure non secure RAM
     tz_configure_ram_non_secure(4, 48);
@@ -170,6 +172,7 @@ static void setup_ns_user(void) {
     NVIC_SetTargetState(TIMER2_IRQn);
     NVIC_SetTargetState(USBD_IRQn);
     NVIC_SetTargetState(USBREGULATOR_IRQn);
+    NVIC_SetTargetState(GPIOTE0_IRQn);
     NVIC_SetTargetState(GPIOTE1_IRQn);
 
     // All GPIOs are non secure
@@ -184,14 +187,6 @@ uint64_t _deviceid(void) {
     return ((uint64_t)NRF_FICR_S->INFO.DEVICEID[1]) << 32 | (uint64_t)NRF_FICR_S->INFO.DEVICEID[0];
 }
 
-static void _radio_callback(uint8_t *packet, uint8_t length) {
-    (void)length;
-    if (memcmp((void *)packet, swrmt_preamble, sizeof(swrmt_preamble)/sizeof(uint8_t)) == 0) {
-        // System reset will switch to the user non secure partition
-        NVIC_SystemReset();
-    }
-}
-
 int main(void) {
 
     setup_watchdog1();
@@ -200,8 +195,8 @@ int main(void) {
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_DPPIC);
     NRF_SPU_S->DPPI[0].PERM &= ~(SPU_DPPI_PERM_CHANNEL0_Msk);
     NRF_SPU_S->DPPI[0].LOCK |= SPU_DPPI_LOCK_LOCK_Locked << SPU_DPPI_LOCK_LOCK_Pos;
-    NRF_IPC_S->PUBLISH_RECEIVE[2] = IPC_PUBLISH_RECEIVE_EN_Enabled << IPC_PUBLISH_RECEIVE_EN_Pos;
-    NRF_WDT1_S->SUBSCRIBE_START = WDT_SUBSCRIBE_START_EN_Enabled << WDT_SUBSCRIBE_START_EN_Pos;;
+    NRF_IPC_S->PUBLISH_RECEIVE[IPC_CHAN_EXPERIMENT_STOP] = IPC_PUBLISH_RECEIVE_EN_Enabled << IPC_PUBLISH_RECEIVE_EN_Pos;
+    NRF_WDT1_S->SUBSCRIBE_START = WDT_SUBSCRIBE_START_EN_Enabled << WDT_SUBSCRIBE_START_EN_Pos;
     NRF_DPPIC_NS->CHENSET = (DPPIC_CHENSET_CH0_Enabled << DPPIC_CHENSET_CH0_Pos);
     NRF_DPPIC_S->CHENSET = (DPPIC_CHENSET_CH0_Enabled << DPPIC_CHENSET_CH0_Pos);
 
@@ -213,26 +208,28 @@ int main(void) {
     // Management code
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_MUTEX);
 
-    // Map P0.29 to network core
-    NRF_P0_S->PIN_CNF[29] = GPIO_PIN_CNF_MCUSEL_NetworkMCU << GPIO_PIN_CNF_MCUSEL_Pos;
-
-    // Map P1.0-9 to network core
-    for (uint8_t pin = 0; pin < 10; pin++) {
-        NRF_P1_S->PIN_CNF[pin] = GPIO_PIN_CNF_MCUSEL_NetworkMCU << GPIO_PIN_CNF_MCUSEL_Pos;
-    }
-
     tz_configure_ram_non_secure(3, 1);
 
-    NRF_IPC_S->INTENSET                         = (1 << IPC_CHAN_RADIO_RX | 1 << IPC_CHAN_OTA_ERASE | 1 << IPC_CHAN_OTA_CHUNK);
-    NRF_IPC_S->SEND_CNF[IPC_CHAN_REQ]           = 1 << IPC_CHAN_REQ;
-    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_RADIO_RX]   = 1 << IPC_CHAN_RADIO_RX;
-    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_STOP]       = 1 << IPC_CHAN_STOP;
-    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_OTA_ERASE]  = 1 << IPC_CHAN_OTA_ERASE;
-    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_OTA_CHUNK]  = 1 << IPC_CHAN_OTA_CHUNK;
+    NRF_IPC_S->INTENSET                                 = (1 << IPC_CHAN_RADIO_RX | 1 << IPC_CHAN_OTA_START | 1 << IPC_CHAN_OTA_CHUNK | 1 << IPC_CHAN_EXPERIMENT_START);
+    NRF_IPC_S->SEND_CNF[IPC_CHAN_REQ]                   = 1 << IPC_CHAN_REQ;
+    NRF_IPC_S->SEND_CNF[IPC_CHAN_LOG_EVENT]             = 1 << IPC_CHAN_LOG_EVENT;
+    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_RADIO_RX]           = 1 << IPC_CHAN_RADIO_RX;
+    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_EXPERIMENT_START]   = 1 << IPC_CHAN_EXPERIMENT_START;
+    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_EXPERIMENT_STOP]    = 1 << IPC_CHAN_EXPERIMENT_STOP;
+    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_OTA_START]          = 1 << IPC_CHAN_OTA_START;
+    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_OTA_CHUNK]          = 1 << IPC_CHAN_OTA_CHUNK;
 
     NVIC_EnableIRQ(IPC_IRQn);
     NVIC_ClearPendingIRQ(IPC_IRQn);
     NVIC_SetPriority(IPC_IRQn, IPC_IRQ_PRIORITY);
+
+    // Map P0.29 to network core
+    NRF_P0_S->PIN_CNF[29] = GPIO_PIN_CNF_MCUSEL_NetworkMCU << GPIO_PIN_CNF_MCUSEL_Pos;
+
+    // Map P1.0-4 to network core
+    for (uint8_t pin = 0; pin < 4; pin++) {
+        NRF_P1_S->PIN_CNF[pin] = GPIO_PIN_CNF_MCUSEL_NetworkMCU << GPIO_PIN_CNF_MCUSEL_Pos;
+    }
 
     // Start the network core
     release_network_core();
@@ -268,15 +265,14 @@ int main(void) {
         while (1) {}
     }
 
-    _bootloader_vars.base_addr = SWARMIT_BASE_ADDRESS;
     NRF_P0_S->DIRSET = (1 << 31);
+    _bootloader_vars.base_addr = SWARMIT_BASE_ADDRESS;
 
     while (1) {
         __WFE();
 
-        if (_bootloader_vars.ota_erase_request) {
-            NRF_P0_S->OUT ^= (1 << 31);
-            _bootloader_vars.ota_erase_request = false;
+        if (_bootloader_vars.ota_start_request) {
+            _bootloader_vars.ota_start_request = false;
 
             // Erase non secure flash
             uint32_t pages_count = (ipc_shared_data.ota.image_size / FLASH_PAGE_SIZE) + (ipc_shared_data.ota.image_size % FLASH_PAGE_SIZE != 0);
@@ -316,6 +312,10 @@ int main(void) {
             radio_disable();
             radio_tx(_bootloader_vars.notification_buffer, sizeof(swrmt_notification_t) + sizeof(uint32_t));
         }
+
+        if (_bootloader_vars.start_experiment) {
+            NVIC_SystemReset();
+        }
     }
 }
 
@@ -323,20 +323,18 @@ int main(void) {
 
 void IPC_IRQHandler(void) {
 
-    if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_RADIO_RX]) {
-        NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_RADIO_RX] = 0;
-        mutex_lock();
-        _radio_callback((uint8_t *)ipc_shared_data.radio.rx_pdu.buffer, ipc_shared_data.radio.rx_pdu.length);
-        mutex_unlock();
-    }
-
-    if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_OTA_ERASE]) {
-        NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_OTA_ERASE] = 0;
-        _bootloader_vars.ota_erase_request = true;
+    if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_OTA_START]) {
+        NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_OTA_START] = 0;
+        _bootloader_vars.ota_start_request = true;
     }
 
     if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_OTA_CHUNK]) {
         NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_OTA_CHUNK] = 0;
         _bootloader_vars.ota_chunk_request = true;
+    }
+
+    if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_EXPERIMENT_START]) {
+        NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_EXPERIMENT_START] = 0;
+        _bootloader_vars.start_experiment = true;
     }
 }
