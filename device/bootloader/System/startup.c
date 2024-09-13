@@ -298,6 +298,7 @@ void Reset_Handler(void) {
     SystemInit();
 
     hfclk_init();
+    lfclk_init();
 
     // Disable all DCDC regulators (use LDO)
     NRF_REGULATORS_S->VREGRADIO.DCDCEN = (REGULATORS_VREGRADIO_DCDCEN_DCDCEN_Disabled << REGULATORS_VREGRADIO_DCDCEN_DCDCEN_Pos);

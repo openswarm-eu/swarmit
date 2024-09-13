@@ -23,6 +23,7 @@ typedef struct __attribute__((packed)) {
 
 typedef struct __attribute__((packed)) {
     uint8_t         preamble[SWRMT_PREAMBLE_LENGTH];    ///< Preamble bytes
+    uint64_t        device_id;
     swrmt_request_t request;                            ///< Request
 } swrmt_packet_t;
 

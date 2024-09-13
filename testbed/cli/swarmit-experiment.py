@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import os
 import logging
 import time
 
@@ -25,9 +24,20 @@ BAUDRATE = 1000000
 CHUNK_SIZE = 128
 SWARMIT_PREAMBLE = bytes([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07])
 
+#DK
+# 0x24374c76b5cf8604,
 
 DEVICES_IDS = [
-    0x24374c76b5cf8604
+    0x61d2bc40c9864d0a, #DB_old
+    # 0x7edc9c15171b71d5, #DB1
+    # 0x298708dfd8e95c9b, #DB2
+    # 0x6761d5b474d7becd, #DB3
+    # 0xb9fa5113b820a2df, #DB4
+    # 0xa2b55971529aa02c, #DB5
+    # 0xde297dd2e6d83274, #DB6
+    # 0xeb4dbfb6ad0f512c, #DB8
+    # 0x9903ef26257feb31, #DB10
+    # 0x0809c4bdd6f5e687, #DB11
 ]
 
 
@@ -106,10 +116,10 @@ class SwarmitStartExperiment:
         print(f"Radio chunks ({CHUNK_SIZE}B): {len(self.chunks)}")
         self.fw_hash = digest.finalize()
 
-    def start_ota(self, device_id):
-        self.device_id = device_id
+    def start_ota(self):
         buffer = bytearray()
         buffer += SWARMIT_PREAMBLE
+        buffer += self.device_id.to_bytes(length=8, byteorder="little")
         buffer += int(RequestType.SWARMIT_REQ_OTA_START.value).to_bytes(
             length=1, byteorder="little"
         )
@@ -118,21 +128,25 @@ class SwarmitStartExperiment:
         print("Sending start ota notification...")
         self.serial.write(hdlc_encode(buffer))
         timeout = 0  # ms
-        while self.start_ack_received is False and timeout < 10000:
+        self.last_deviceid_ack = None
+        while self.start_ack_received is False and timeout < 10000 and self.last_deviceid_ack != self.device_id:
             timeout += 1
             time.sleep(0.0001)
-        return self.start_ack_received is True and self.last_deviceid_ack == self.device_id
+        return self.start_ack_received is True
 
     def send_chunk(self, chunk):
         send_time = time.time()
         send = True
         tries = 0
+        self.last_deviceid_ack = None
         while tries < 3:
-            if self.last_acked_index == chunk.index:
+            if self.last_acked_index == chunk.index and self.last_deviceid_ack == self.device_id:
                 break
             if send is True:
+                bcast_id = 0
                 buffer = bytearray()
                 buffer += SWARMIT_PREAMBLE
+                buffer += self.device_id.to_bytes(length=8, byteorder="little")
                 buffer += int(RequestType.SWARMIT_REQ_OTA_CHUNK.value).to_bytes(
                     length=1, byteorder="little"
                 )
@@ -161,8 +175,10 @@ class SwarmitStartExperiment:
         progress.close()
 
     def start(self):
+        bcast_id = 0
         buffer = bytearray()
         buffer += SWARMIT_PREAMBLE
+        buffer += bcast_id.to_bytes(length=8, byteorder="little")
         buffer += int(RequestType.SWARMIT_REQ_EXPERIMENT_START.value).to_bytes(
             length=1, byteorder="little"
         )
@@ -179,8 +195,10 @@ class SwarmitStopExperiment:
         self.serial.write(int(PROTOCOL_VERSION).to_bytes(length=1))
 
     def stop(self):
+        bcast_id = 0
         buffer = bytearray()
         buffer += SWARMIT_PREAMBLE
+        buffer += bcast_id.to_bytes(length=8, byteorder="little")
         buffer += int(RequestType.SWARMIT_REQ_EXPERIMENT_STOP.value).to_bytes(
             length=1, byteorder="little"
         )
@@ -235,11 +253,19 @@ class SwarmitMonitorExperiment:
     default=BAUDRATE,
     help=f"Serial port baudrate. Default: {BAUDRATE}.",
 )
+@click.option(
+    "-d",
+    "--devices",
+    type=click.Choice(DEVICES_IDS),
+    default=DEVICES_IDS,
+    multiple=True
+)
 @click.pass_context
-def main(ctx, port, baudrate):
+def main(ctx, port, baudrate, devices):
     ctx.ensure_object(dict)
     ctx.obj['port'] = port
     ctx.obj['baudrate'] = baudrate
+    ctx.obj['devices'] = devices
 
 
 @main.command()
@@ -256,6 +282,7 @@ def start(ctx, yes, firmware):
     structlog.configure(
         wrapper_class=structlog.make_filtering_bound_logger(logging.CRITICAL),
     )
+    start = time.time()
     try:
         experiment = SwarmitStartExperiment(
             ctx.obj['port'],
@@ -274,9 +301,10 @@ def start(ctx, yes, firmware):
         if yes is False:
             click.confirm("Do you want to continue?", default=True, abort=True)
         ret = experiment.init()
-        for device_id in DEVICES_IDS:
+        for device_id in ctx.obj["devices"]:
             print(f"Preparing device {hex(device_id)}")
-            ret = experiment.start_ota(device_id)
+            experiment.device_id = device_id
+            ret = experiment.start_ota()
             if ret is False:
                 print(f"Error: No start acknowledgment received from {hex(device_id)}. Aborting.")
                 return
@@ -286,6 +314,7 @@ def start(ctx, yes, firmware):
                 print(f"Error during transfering image to {hex(device_id)}: {exc}")
                 return
     experiment.start()
+    print(f"Elapsed: {time.time() - start:.3f}s")
     print("Experiment started.")
 
 

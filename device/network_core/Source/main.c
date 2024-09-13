@@ -30,17 +30,19 @@ typedef struct {
     bool        ipc_log_received;
     uint8_t     gpio_event_idx;
     uint8_t     hash[SWRMT_OTA_SHA256_LENGTH];
+    uint64_t    device_id;
+    bool        timer_running;
 } swrmt_app_data_t;
 
 static swrmt_app_data_t _app_vars = { 0 };
 
-static const uint8_t _pin_mapping[] = {
-    [0] = 4,    // P0.04 (app) => P1.00 (net)
-    [1] = 5,    // P0.05 (app) => P1.01 (net)
-    [2] = 6,    // P0.06 (app) => P1.02 (net)
-    [3] = 7,    // P0.07 (app) => P1.03 (net)
-    [4] = 25,   // P0.25 (app) => P1.04 (net)
-};
+//static const uint8_t _pin_mapping[] = {
+//    [0] = 4,    // P0.04 (app) => P1.00 (net)
+//    [1] = 5,    // P0.05 (app) => P1.01 (net)
+//    [2] = 6,    // P0.06 (app) => P1.02 (net)
+//    [3] = 7,    // P0.07 (app) => P1.03 (net)
+//    [4] = 25,   // P0.25 (app) => P1.04 (net)
+//};
 
 //=========================== functions =========================================
 
@@ -52,7 +54,16 @@ static void _radio_callback(uint8_t *packet, uint8_t length) {
     }
 
     uint8_t *ptr = packet + SWRMT_PREAMBLE_LENGTH;
-    memcpy(_app_vars.req_buffer, ptr, length - SWRMT_PREAMBLE_LENGTH);
+
+    uint64_t target_device_id;
+    memcpy(&target_device_id, ptr, sizeof(uint64_t));
+    if (target_device_id != _app_vars.device_id && target_device_id != 0) {
+        // Ignore packet not targetting this device
+        return;
+    }
+
+    ptr += sizeof(uint64_t);
+    memcpy(_app_vars.req_buffer, ptr, length - SWRMT_PREAMBLE_LENGTH - sizeof(uint64_t));
     _app_vars.req_received = true;
 }
 
@@ -65,28 +76,36 @@ uint64_t _deviceid(void) {
     return ((uint64_t)NRF_FICR_NS->INFO.DEVICEID[1]) << 32 | (uint64_t)NRF_FICR_NS->INFO.DEVICEID[0];
 }
 
-void _gpio_init(uint8_t pin) {
-    NRF_P1_NS->PIN_CNF[pin] = 0;
-    NRF_P1_NS->PIN_CNF[pin] &= ~(1UL << GPIO_PIN_CNF_INPUT_Pos);
-    NRF_P1_NS->PIN_CNF[pin] |= (GPIO_PIN_CNF_PULL_Pulldown << GPIO_PIN_CNF_PULL_Pos);
-
-    NRF_GPIOTE_NS->CONFIG[pin] = (GPIOTE_CONFIG_MODE_Event << GPIOTE_CONFIG_MODE_Pos) |
-                                    (pin << GPIOTE_CONFIG_PSEL_Pos) |
-                                    (1 << GPIOTE_CONFIG_PORT_Pos) |
-                                    (GPIOTE_CONFIG_POLARITY_Toggle << GPIOTE_CONFIG_POLARITY_Pos);
-    NRF_GPIOTE_NS->INTENSET |= (1 << pin);
+static void delay_ms(uint32_t ms) {
+    NRF_TIMER0_NS->TASKS_CAPTURE[0] = 1;
+    NRF_TIMER0_NS->CC[0] += ms * 1000;
+    _app_vars.timer_running = true;
+    while (_app_vars.timer_running) {
+        __WFE();
+    }
 }
 
-uint8_t _gpio_read(uint8_t pin) {
-    return (NRF_P1_NS->IN & (1 << pin)) ? 1 : 0;
-}
+//void _gpio_init(uint8_t pin) {
+//    NRF_P1_NS->PIN_CNF[pin] = 0;
+//    NRF_P1_NS->PIN_CNF[pin] &= ~(1UL << GPIO_PIN_CNF_INPUT_Pos);
+//    NRF_P1_NS->PIN_CNF[pin] |= (GPIO_PIN_CNF_PULL_Pulldown << GPIO_PIN_CNF_PULL_Pos);
+
+//    NRF_GPIOTE_NS->CONFIG[pin] = (GPIOTE_CONFIG_MODE_Event << GPIOTE_CONFIG_MODE_Pos) |
+//                                    (pin << GPIOTE_CONFIG_PSEL_Pos) |
+//                                    (1 << GPIOTE_CONFIG_PORT_Pos) |
+//                                    (GPIOTE_CONFIG_POLARITY_Toggle << GPIOTE_CONFIG_POLARITY_Pos);
+//    NRF_GPIOTE_NS->INTENSET |= (1 << pin);
+//}
+
+//uint8_t _gpio_read(uint8_t pin) {
+//    return (NRF_P1_NS->IN & (1 << pin)) ? 1 : 0;
+//}
 
 //=========================== main ==============================================
 
 int main(void) {
 
-    uint64_t device_id = _deviceid();
-    (void)device_id;
+    _app_vars.device_id = _deviceid();
     // Configure constant latency mode for better performances
     NRF_POWER_NS->TASKS_CONSTLAT = 1;
 
@@ -102,7 +121,8 @@ int main(void) {
     NVIC_ClearPendingIRQ(IPC_IRQn);
     NVIC_SetPriority(IPC_IRQn, 1);
 
-    NRF_P0_NS->DIRSET = (1 << 29);
+    //NRF_P1_NS->DIRSET = (1 << 4);
+    //NRF_P1_NS->OUTSET = (1 << 4);
 
     // Configure timer used for timestamping events
     NRF_TIMER0_NS->TASKS_CLEAR = 1;
@@ -113,10 +133,10 @@ int main(void) {
     NRF_TIMER0_NS->TASKS_START = 1;
 
     // Initialize monitoring gpios
-    NVIC_EnableIRQ(GPIOTE_IRQn);
-    for (uint8_t pin = 0; pin < 5; pin++) {
-        _gpio_init(pin);
-    }
+    //NVIC_EnableIRQ(GPIOTE_IRQn);
+    //for (uint8_t pin = 0; pin < 5; pin++) {
+    //    _gpio_init(pin);
+    //}
 
     ipc_shared_data.net_ready = true;
 
@@ -185,8 +205,10 @@ int main(void) {
                     radio_disable();
                     break;
                 case IPC_RADIO_TX_REQ:
+                {
                     radio_tx((uint8_t *)ipc_shared_data.radio.tx_pdu.buffer, ipc_shared_data.radio.tx_pdu.length);
-                    break;
+                    delay_ms(10);
+                 }   break;
                 case IPC_RADIO_RSSI_REQ:
                     ipc_shared_data.radio.rssi = radio_rssi();
                     break;
@@ -212,28 +234,28 @@ int main(void) {
             radio_tx(_app_vars.notification_buffer, sizeof(swrmt_notification_t) + sizeof(uint32_t) + sizeof(ipc_log_data_t));
         }
 
-        if (_app_vars.gpio_event_idx != 0xff) {
-            _app_vars.gpio_event_idx = 0xff;
-            // Notify gpio event
-            swrmt_notification_t notification = {
-                .device_id = _deviceid(),
-                .type = SWRMT_NOTIFICATION_GPIO_EVENT,
-            };
+        //if (_app_vars.gpio_event_idx != 0xff) {
+        //    _app_vars.gpio_event_idx = 0xff;
+        //    // Notify gpio event
+        //    swrmt_notification_t notification = {
+        //        .device_id = _deviceid(),
+        //        .type = SWRMT_NOTIFICATION_GPIO_EVENT,
+        //    };
 
-            swrmt_gpio_event_t event = {
-                .timestamp = _timestamp(),
-                .data = {
-                    .port = 0,
-                    .pin = _pin_mapping[_app_vars.gpio_event_idx],
-                    .value = _gpio_read(_app_vars.gpio_event_idx),
-                }
-            };
-            _app_vars.gpio_event_idx = 0xff;
-            memcpy(_app_vars.notification_buffer, &notification, sizeof(swrmt_notification_t));
-            memcpy(_app_vars.notification_buffer + sizeof(swrmt_notification_t), &event, sizeof(swrmt_gpio_event_t));
-            radio_disable();
-            radio_tx(_app_vars.notification_buffer, sizeof(swrmt_notification_t) + sizeof(swrmt_gpio_event_t));
-        }
+        //    swrmt_gpio_event_t event = {
+        //        .timestamp = _timestamp(),
+        //        .data = {
+        //            .port = 0,
+        //            .pin = _pin_mapping[_app_vars.gpio_event_idx],
+        //            .value = _gpio_read(_app_vars.gpio_event_idx),
+        //        }
+        //    };
+        //    _app_vars.gpio_event_idx = 0xff;
+        //    memcpy(_app_vars.notification_buffer, &notification, sizeof(swrmt_notification_t));
+        //    memcpy(_app_vars.notification_buffer + sizeof(swrmt_notification_t), &event, sizeof(swrmt_gpio_event_t));
+        //    radio_disable();
+        //    radio_tx(_app_vars.notification_buffer, sizeof(swrmt_notification_t) + sizeof(swrmt_gpio_event_t));
+        //}
     };
 }
 
@@ -249,12 +271,20 @@ void IPC_IRQHandler(void) {
     }
 }
 
-void GPIOTE_IRQHandler(void) {
-    for (uint8_t i = 0; i < GPIO_CHANNELS_COUNT; ++i) {
-        if (NRF_GPIOTE_NS->EVENTS_IN[i] == 1) {
-            NRF_GPIOTE_NS->EVENTS_IN[i] = 0;
-            _app_vars.gpio_event_idx    = i;
-            break;
-        }
+//void GPIOTE_IRQHandler(void) {
+//    for (uint8_t i = 0; i < GPIO_CHANNELS_COUNT; ++i) {
+//        if (NRF_GPIOTE_NS->EVENTS_IN[i] == 1) {
+//            NRF_GPIOTE_NS->EVENTS_IN[i] = 0;
+//            _app_vars.gpio_event_idx    = i;
+//            break;
+//        }
+//    }
+//}
+
+void TIMER0_IRQHandler(void) {
+
+    if (NRF_TIMER0_NS->EVENTS_COMPARE[0] == 1) {
+        NRF_TIMER0_NS->EVENTS_COMPARE[0] = 0;
+        _app_vars.timer_running = false;
     }
 }
