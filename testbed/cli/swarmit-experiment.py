@@ -29,15 +29,15 @@ SWARMIT_PREAMBLE = bytes([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07])
 
 DEVICES_IDS = [
     0x61d2bc40c9864d0a, #DB_old
-    # 0x7edc9c15171b71d5, #DB1
-    # 0x298708dfd8e95c9b, #DB2
-    # 0x6761d5b474d7becd, #DB3
-    # 0xb9fa5113b820a2df, #DB4
-    # 0xa2b55971529aa02c, #DB5
-    # 0xde297dd2e6d83274, #DB6
-    # 0xeb4dbfb6ad0f512c, #DB8
-    # 0x9903ef26257feb31, #DB10
-    # 0x0809c4bdd6f5e687, #DB11
+    0x7edc9c15171b71d5, #DB1
+    0x298708dfd8e95c9b, #DB2
+    0x6761d5b474d7becd, #DB3
+    0xb9fa5113b820a2df, #DB4
+    0xa2b55971529aa02c, #DB5
+    0xde297dd2e6d83274, #DB6
+    0xeb4dbfb6ad0f512c, #DB8
+    0x9903ef26257feb31, #DB10
+    0x0809c4bdd6f5e687, #DB11
 ]
 
 
@@ -77,10 +77,10 @@ class SwarmitStartExperiment:
         self.start_ack_received = False
         self.firmware = bytearray(firmware.read()) if firmware is not None else None
         self.last_acked_index = -1
-        self.last_deviceid_ack = None
         self.chunks = []
         self.fw_hash = None
         self.device_id = None
+        self.acked_ids = []
         # Just write a single byte to fake a DotBot gateway handshake
         self.serial.write(int(PROTOCOL_VERSION).to_bytes(length=1))
 
@@ -90,7 +90,9 @@ class SwarmitStartExperiment:
             payload = self.hdlc_handler.payload
             if not payload:
                 return
-            self.last_deviceid_ack = int.from_bytes(payload[0:8], byteorder="little")
+            deviceid_ack = int.from_bytes(payload[0:8], byteorder="little")
+            if deviceid_ack not in self.acked_ids:
+                self.acked_ids.append(deviceid_ack)
             if payload[8] == NotificationType.SWARMIT_NOTIFICATION_OTA_START_ACK.value:
                 self.start_ack_received = True
             elif payload[8] == NotificationType.SWARMIT_NOTIFICATION_OTA_CHUNK_ACK.value:
@@ -117,19 +119,20 @@ class SwarmitStartExperiment:
         self.fw_hash = digest.finalize()
 
     def start_ota(self):
+        bcast_id = 0
         buffer = bytearray()
         buffer += SWARMIT_PREAMBLE
-        buffer += self.device_id.to_bytes(length=8, byteorder="little")
+        buffer += bcast_id.to_bytes(length=8, byteorder="little")
         buffer += int(RequestType.SWARMIT_REQ_OTA_START.value).to_bytes(
             length=1, byteorder="little"
         )
         buffer += len(self.firmware).to_bytes(length=4, byteorder="little")
         buffer += self.fw_hash
         print("Sending start ota notification...")
+        self.acked_ids = []
         self.serial.write(hdlc_encode(buffer))
         timeout = 0  # ms
-        self.last_deviceid_ack = None
-        while self.start_ack_received is False and timeout < 10000 and self.last_deviceid_ack != self.device_id:
+        while self.start_ack_received is False and timeout < 10000 and len(self.acked_ids) != len(DEVICES_IDS):
             timeout += 1
             time.sleep(0.0001)
         return self.start_ack_received is True
@@ -138,15 +141,15 @@ class SwarmitStartExperiment:
         send_time = time.time()
         send = True
         tries = 0
-        self.last_deviceid_ack = None
+        self.acked_ids = []
         while tries < 3:
-            if self.last_acked_index == chunk.index and self.last_deviceid_ack == self.device_id:
+            if self.last_acked_index == chunk.index and len(self.acked_ids) == len(DEVICES_IDS):
                 break
             if send is True:
                 bcast_id = 0
                 buffer = bytearray()
                 buffer += SWARMIT_PREAMBLE
-                buffer += self.device_id.to_bytes(length=8, byteorder="little")
+                buffer += bcast_id.to_bytes(length=8, byteorder="little")
                 buffer += int(RequestType.SWARMIT_REQ_OTA_CHUNK.value).to_bytes(
                     length=1, byteorder="little"
                 )
@@ -164,8 +167,6 @@ class SwarmitStartExperiment:
         self.last_deviceid_ack = None
 
     def transfer(self):
-        if self.device_id is None:
-            raise Exception("Device ID not set.")
         data_size = len(self.firmware)
         progress = tqdm(range(0, data_size), unit="B", unit_scale=False, colour="green", ncols=100)
         progress.set_description(f"Loading firmware ({int(data_size / 1024)}kB)")
@@ -301,18 +302,15 @@ def start(ctx, yes, firmware):
         if yes is False:
             click.confirm("Do you want to continue?", default=True, abort=True)
         ret = experiment.init()
-        for device_id in ctx.obj["devices"]:
-            print(f"Preparing device {hex(device_id)}")
-            experiment.device_id = device_id
-            ret = experiment.start_ota()
-            if ret is False:
-                print(f"Error: No start acknowledgment received from {hex(device_id)}. Aborting.")
-                return
-            try:
-                experiment.transfer()
-            except Exception as exc:
-                print(f"Error during transfering image to {hex(device_id)}: {exc}")
-                return
+        ret = experiment.start_ota()
+        if ret is False:
+            print(f"Error: some acknowledgment are missing. Aborting.")
+            return
+        try:
+            experiment.transfer()
+        except Exception as exc:
+            print(f"Error during transfer of image: {exc}")
+            return
     experiment.start()
     print(f"Elapsed: {time.time() - start:.3f}s")
     print("Experiment started.")

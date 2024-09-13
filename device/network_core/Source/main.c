@@ -206,8 +206,8 @@ int main(void) {
                     break;
                 case IPC_RADIO_TX_REQ:
                 {
+                    delay_ms(9);
                     radio_tx((uint8_t *)ipc_shared_data.radio.tx_pdu.buffer, ipc_shared_data.radio.tx_pdu.length);
-                    delay_ms(10);
                  }   break;
                 case IPC_RADIO_RSSI_REQ:
                     ipc_shared_data.radio.rssi = radio_rssi();
