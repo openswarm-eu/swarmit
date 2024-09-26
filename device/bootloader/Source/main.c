@@ -123,9 +123,13 @@ static void setup_ns_user(void) {
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_EGU4);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_EGU5);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_PWM0);
+    tz_configure_periph_dma_non_secure(NRF_APPLICATION_PERIPH_ID_PWM0);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_PWM1);
+    tz_configure_periph_dma_non_secure(NRF_APPLICATION_PERIPH_ID_PWM1);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_PWM2);
+    tz_configure_periph_dma_non_secure(NRF_APPLICATION_PERIPH_ID_PWM2);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_PWM3);
+    tz_configure_periph_dma_non_secure(NRF_APPLICATION_PERIPH_ID_PWM3);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_QDEC0);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_QDEC1);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_QSPI);
