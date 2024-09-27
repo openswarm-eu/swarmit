@@ -112,10 +112,11 @@ static void setup_ns_user(void) {
 
     // Configure access to allows peripherals from non secure world
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_I2S0);
-    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_MUTEX);
-    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_OSCILLATORS_REGULATORS);
+    tz_configure_periph_dma_non_secure(NRF_APPLICATION_PERIPH_ID_I2S0);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_P0_P1);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_PDM0);
+    tz_configure_periph_dma_non_secure(NRF_APPLICATION_PERIPH_ID_PDM0);
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_COMP_LPCOMP);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_EGU0);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_EGU1);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_EGU2);
@@ -133,18 +134,26 @@ static void setup_ns_user(void) {
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_QDEC0);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_QDEC1);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_QSPI);
+    tz_configure_periph_dma_non_secure(NRF_APPLICATION_PERIPH_ID_QSPI);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_RTC0);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_RTC1);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_SAADC);
+    tz_configure_periph_dma_non_secure(NRF_APPLICATION_PERIPH_ID_SAADC);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_SPIM0_SPIS0_TWIM0_TWIS0_UARTE0);
+    tz_configure_periph_dma_non_secure(NRF_APPLICATION_PERIPH_ID_SPIM0_SPIS0_TWIM0_TWIS0_UARTE0);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_SPIM1_SPIS1_TWIM1_TWIS1_UARTE1);
+    tz_configure_periph_dma_non_secure(NRF_APPLICATION_PERIPH_ID_SPIM1_SPIS1_TWIM1_TWIS1_UARTE1);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_SPIM2_SPIS2_TWIM2_TWIS2_UARTE2);
+    tz_configure_periph_dma_non_secure(NRF_APPLICATION_PERIPH_ID_SPIM2_SPIS2_TWIM2_TWIS2_UARTE2);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_SPIM3_SPIS3_TWIM3_TWIS3_UARTE3);
+    tz_configure_periph_dma_non_secure(NRF_APPLICATION_PERIPH_ID_SPIM3_SPIS3_TWIM3_TWIS3_UARTE3);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_SPIM4);
+    tz_configure_periph_dma_non_secure(NRF_APPLICATION_PERIPH_ID_SPIM4);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_TIMER0);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_TIMER1);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_TIMER2);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_USBD);
+    tz_configure_periph_dma_non_secure(NRF_APPLICATION_PERIPH_ID_USBD);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_USBREGULATOR);
 
     // Set interrupt state as non secure for non secure peripherals
