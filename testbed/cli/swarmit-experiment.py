@@ -28,16 +28,16 @@ SWARMIT_PREAMBLE = bytes([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07])
 # 0x24374c76b5cf8604,
 
 DEVICES_IDS = [
-    "0x61d2bc40c9864d0a",  # DB_old
-    "0x7edc9c15171b71d5",  # DB1
-    "0x298708dfd8e95c9b",  # DB2
-    "0x6761d5b474d7becd",  # DB3
-    "0xb9fa5113b820a2df",  # DB4
+    # "0x61d2bc40c9864d0a",  # DB_old
+    # "0x7edc9c15171b71d5",  # DB1
+    # "0x298708dfd8e95c9b",  # DB2
+    # "0x6761d5b474d7becd",  # DB3
+    # "0xb9fa5113b820a2df",  # DB4
     "0xa2b55971529aa02c",  # DB5
     "0xde297dd2e6d83274",  # DB6
-    "0xeb4dbfb6ad0f512c",  # DB8
-    "0x9903ef26257feb31",  # DB10
-    "0x0809c4bdd6f5e687",  # DB11
+    # "0xeb4dbfb6ad0f512c",  # DB8
+    # "0x9903ef26257feb31",  # DB10
+    # "0x0809c4bdd6f5e687",  # DB11
 ]
 
 
@@ -127,20 +127,22 @@ class SwarmitStartExperiment:
         print(f"Radio chunks ({CHUNK_SIZE}B): {len(self.chunks)}")
         self.fw_hash = digest.finalize()
 
+    def _send_start_ota(self, device_id):
+        buffer = bytearray()
+        buffer += SWARMIT_PREAMBLE
+        buffer += int(device_id, 16).to_bytes(length=8, byteorder="little")
+        buffer += int(RequestType.SWARMIT_REQ_OTA_START.value).to_bytes(
+            length=1, byteorder="little"
+        )
+        buffer += len(self.firmware).to_bytes(length=4, byteorder="little")
+        buffer += self.fw_hash
+        self.serial.write(hdlc_encode(buffer))
+
     def start_ota(self, device_ids):
         if device_ids == DEVICES_IDS:
-            _device_id = 0
-            buffer = bytearray()
-            buffer += SWARMIT_PREAMBLE
-            buffer += _device_id.to_bytes(length=8, byteorder="little")
-            buffer += int(RequestType.SWARMIT_REQ_OTA_START.value).to_bytes(
-                length=1, byteorder="little"
-            )
-            buffer += len(self.firmware).to_bytes(length=4, byteorder="little")
-            buffer += self.fw_hash
             print("Broadcast start ota notification...")
+            self._send_start_ota("0")
             self.acked_ids = []
-            self.serial.write(hdlc_encode(buffer))
             timeout = 0  # ms
             while timeout < 10000 and sorted(self.acked_ids) != sorted(device_ids):
                 timeout += 1
@@ -148,17 +150,10 @@ class SwarmitStartExperiment:
         else:
             self.acked_ids = []
             for device_id in device_ids:
-                buffer = bytearray()
-                buffer += SWARMIT_PREAMBLE
-                buffer += int(device_id, 16).to_bytes(length=8, byteorder="little")
-                buffer += int(RequestType.SWARMIT_REQ_OTA_START.value).to_bytes(
-                    length=1, byteorder="little"
-                )
-                buffer += len(self.firmware).to_bytes(length=4, byteorder="little")
-                buffer += self.fw_hash
                 print(f"Sending start ota notification to {device_id}...")
-                self.serial.write(hdlc_encode(buffer))
+                self._send_start_ota(device_id)
                 timeout = 0  # ms
+                self.start_ack_received = False
                 while (
                     self.start_ack_received is False
                     and timeout < 10000
@@ -166,7 +161,6 @@ class SwarmitStartExperiment:
                 ):
                     timeout += 1
                     time.sleep(0.0001)
-                self.start_ack_received = False
         return self.acked_ids
 
     def send_chunk(self, chunk, device_id):
@@ -174,7 +168,7 @@ class SwarmitStartExperiment:
         send = True
         tries = 0
 
-        def is_acknowledged():
+        def is_chunk_acknowledged():
             if device_id == "0":
                 return self.last_acked_index == chunk.index and sorted(
                     self.acked_ids
@@ -186,7 +180,7 @@ class SwarmitStartExperiment:
 
         self.acked_ids = []
         while tries < 3:
-            if is_acknowledged():
+            if is_chunk_acknowledged():
                 break
             if send is True:
                 buffer = bytearray()
@@ -223,25 +217,21 @@ class SwarmitStartExperiment:
             progress.update(chunk.size)
         progress.close()
 
+    def _send_start(self, device_id):
+        buffer = bytearray()
+        buffer += SWARMIT_PREAMBLE
+        buffer += int(device_id, 16).to_bytes(length=8, byteorder="little")
+        buffer += int(RequestType.SWARMIT_REQ_EXPERIMENT_START.value).to_bytes(
+            length=1, byteorder="little"
+        )
+        self.serial.write(hdlc_encode(buffer))
+
     def start(self, device_ids):
         if device_ids == DEVICES_IDS:
-            bcast_id = 0
-            buffer = bytearray()
-            buffer += SWARMIT_PREAMBLE
-            buffer += bcast_id.to_bytes(length=8, byteorder="little")
-            buffer += int(RequestType.SWARMIT_REQ_EXPERIMENT_START.value).to_bytes(
-                length=1, byteorder="little"
-            )
-            self.serial.write(hdlc_encode(buffer))
+            self._send_start("0")
         else:
             for device_id in device_ids:
-                buffer = bytearray()
-                buffer += SWARMIT_PREAMBLE
-                buffer += int(device_id, 16).to_bytes(length=8, byteorder="little")
-                buffer += int(RequestType.SWARMIT_REQ_EXPERIMENT_START.value).to_bytes(
-                    length=1, byteorder="little"
-                )
-                self.serial.write(hdlc_encode(buffer))
+                self._send_start(device_id)
 
 
 class SwarmitStopExperiment:
@@ -253,25 +243,21 @@ class SwarmitStopExperiment:
         # Just write a single byte to fake a DotBot gateway handshake
         self.serial.write(int(PROTOCOL_VERSION).to_bytes(length=1))
 
+    def _send_stop(self, device_id):
+        buffer = bytearray()
+        buffer += SWARMIT_PREAMBLE
+        buffer += int(device_id, 16).to_bytes(length=8, byteorder="little")
+        buffer += int(RequestType.SWARMIT_REQ_EXPERIMENT_STOP.value).to_bytes(
+            length=1, byteorder="little"
+        )
+        self.serial.write(hdlc_encode(buffer))
+
     def stop(self, device_ids):
         if device_ids == DEVICES_IDS:
-            bcast_id = 0
-            buffer = bytearray()
-            buffer += SWARMIT_PREAMBLE
-            buffer += bcast_id.to_bytes(length=8, byteorder="little")
-            buffer += int(RequestType.SWARMIT_REQ_EXPERIMENT_STOP.value).to_bytes(
-                length=1, byteorder="little"
-            )
-            self.serial.write(hdlc_encode(buffer))
+            self._send_stop("0")
         else:
             for device_id in device_ids:
-                buffer = bytearray()
-                buffer += SWARMIT_PREAMBLE
-                buffer += int(device_id, 16).to_bytes(length=8, byteorder="little")
-                buffer += int(RequestType.SWARMIT_REQ_EXPERIMENT_STOP.value).to_bytes(
-                    length=1, byteorder="little"
-                )
-                self.serial.write(hdlc_encode(buffer))
+                self._send_stop(device_id)
 
 
 class SwarmitMonitorExperiment:
