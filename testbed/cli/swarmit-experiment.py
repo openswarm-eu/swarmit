@@ -12,8 +12,12 @@ import structlog
 
 from tqdm import tqdm
 from cryptography.hazmat.primitives import hashes
+
+from rich.console import Console
 from rich.live import Live
 from rich.table import Table
+
+from yaml import load, Loader
 
 from dotbot.logger import LOGGER
 from dotbot.hdlc import hdlc_encode, HDLCHandler, HDLCState
@@ -25,22 +29,6 @@ SERIAL_PORT = "/dev/ttyACM0"
 BAUDRATE = 1000000
 CHUNK_SIZE = 128
 SWARMIT_PREAMBLE = bytes([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07])
-
-# DK
-# 0x24374c76b5cf8604,
-
-DEVICES_IDS = [
-    "0x61d2bc40c9864d0a",  # DB_old
-    "0x7edc9c15171b71d5",  # DB1
-    "0x298708dfd8e95c9b",  # DB2
-    "0x6761d5b474d7becd",  # DB3
-    "0xb9fa5113b820a2df",  # DB4
-    "0xa2b55971529aa02c",  # DB5
-    "0xde297dd2e6d83274",  # DB6
-    "0xeb4dbfb6ad0f512c",  # DB8
-    "0x9903ef26257feb31",  # DB10
-    "0x0809c4bdd6f5e687",  # DB11
-]
 
 
 class NotificationType(Enum):
@@ -83,11 +71,12 @@ class DataChunk:
 class SwarmitStartExperiment:
     """Class used to start an experiment."""
 
-    def __init__(self, port, baudrate, firmware):
+    def __init__(self, port, baudrate, firmware, known_devices):
         self.serial = SerialInterface(port, baudrate, self.on_byte_received)
         self.hdlc_handler = HDLCHandler()
         self.start_ack_received = False
         self.firmware = bytearray(firmware.read()) if firmware is not None else None
+        self.known_devices = known_devices
         self.last_acked_index = -1
         self.chunks = []
         self.fw_hash = None
@@ -150,12 +139,14 @@ class SwarmitStartExperiment:
         self.serial.write(hdlc_encode(buffer))
 
     def start_ota(self, device_ids):
-        if device_ids == DEVICES_IDS:
+        if not device_ids:
             print("Broadcast start ota notification...")
             self._send_start_ota("0")
             self.acked_ids = []
             timeout = 0  # ms
-            while timeout < 10000 and sorted(self.acked_ids) != sorted(device_ids):
+            while timeout < 10000 and sorted(self.acked_ids) != sorted(
+                self.known_devices
+            ):
                 timeout += 1
                 time.sleep(0.0001)
         else:
@@ -183,7 +174,7 @@ class SwarmitStartExperiment:
             if device_id == "0":
                 return self.last_acked_index == chunk.index and sorted(
                     self.acked_ids
-                ) == sorted(DEVICES_IDS)
+                ) == sorted(self.known_devices)
             else:
                 return (
                     self.last_acked_index == chunk.index and device_id in self.acked_ids
@@ -220,7 +211,7 @@ class SwarmitStartExperiment:
         )
         progress.set_description(f"Loading firmware ({int(data_size / 1024)}kB)")
         for chunk in self.chunks:
-            if sorted(device_ids) == sorted(DEVICES_IDS):
+            if not device_ids:
                 self.send_chunk(chunk, "0")
             else:
                 for device_id in device_ids:
@@ -238,18 +229,21 @@ class SwarmitStartExperiment:
         self.serial.write(hdlc_encode(buffer))
 
     def start(self, device_ids):
-        if device_ids == DEVICES_IDS:
+        if not device_ids:
             self._send_start("0")
         else:
             for device_id in device_ids:
+                if device_id not in self.known_devices:
+                    continue
                 self._send_start(device_id)
 
 
 class SwarmitStopExperiment:
     """Class used to stop an experiment."""
 
-    def __init__(self, port, baudrate):
+    def __init__(self, port, baudrate, known_devices):
         self.serial = SerialInterface(port, baudrate, lambda x: None)
+        self.known_devices = known_devices
         self.hdlc_handler = HDLCHandler()
         # Just write a single byte to fake a DotBot gateway handshake
         self.serial.write(int(PROTOCOL_VERSION).to_bytes(length=1))
@@ -264,10 +258,12 @@ class SwarmitStopExperiment:
         self.serial.write(hdlc_encode(buffer))
 
     def stop(self, device_ids):
-        if device_ids == DEVICES_IDS:
+        if not device_ids:
             self._send_stop("0")
         else:
             for device_id in device_ids:
+                if device_id not in self.known_devices:
+                    continue
                 self._send_stop(device_id)
 
 
@@ -318,14 +314,15 @@ class SwarmitMonitorExperiment:
 class SwarmitStatusExperiment:
     """Class used to get the status of experiment."""
 
-    def __init__(self, port, baudrate):
+    def __init__(self, port, baudrate, known_devices):
         self.logger = LOGGER.bind(context=__name__)
         self.hdlc_handler = HDLCHandler()
         self.serial = SerialInterface(port, baudrate, self.on_byte_received)
+        self.known_devices = known_devices
         self.last_deviceid_notification = None
         # Just write a single byte to fake a DotBot gateway handshake
         self.serial.write(int(PROTOCOL_VERSION).to_bytes(length=1))
-        self.status_data = dict.fromkeys(DEVICES_IDS, StatusType.Off)
+        self.status_data = dict.fromkeys(self.known_devices, StatusType.Off)
         self.resp_ids = []
         self.table = Table()
         self.table.add_column("Device ID", style="magenta", no_wrap=True)
@@ -361,7 +358,9 @@ class SwarmitStatusExperiment:
         self.serial.write(hdlc_encode(buffer))
         timeout = 0  # ms
         with Live(self.table, refresh_per_second=4) as live:
-            while timeout < 10000 and sorted(self.resp_ids) != sorted(DEVICES_IDS):
+            while timeout < 10000 and sorted(self.resp_ids) != sorted(
+                self.known_devices
+            ):
                 timeout += 1
                 time.sleep(0.0001)
                 live.update(self.table)
@@ -387,16 +386,38 @@ class SwarmitStatusExperiment:
 @click.option(
     "-d",
     "--devices",
-    type=click.Choice(DEVICES_IDS),
-    default=DEVICES_IDS,
-    multiple=True,
+    type=str,
+    default="",
+    help=f"Subset list of devices to interact with, separated with ,",
+)
+@click.option(
+    "-c",
+    "--config",
+    type=click.File(mode="rb", lazy=True),
+    required=False,
+    help=f"Yaml file containing the list of known devices.",
 )
 @click.pass_context
-def main(ctx, port, baudrate, devices):
+def main(ctx, port, baudrate, devices, config):
     ctx.ensure_object(dict)
     ctx.obj["port"] = port
     ctx.obj["baudrate"] = baudrate
-    ctx.obj["devices"] = devices
+    ctx.obj["devices"] = [e for e in devices.split(",") if e]
+    console = Console()
+    if config is None:
+        console.print("[bold red]Error:[/] Missing configuration file. Exiting.")
+        ctx.exit()
+    try:
+        data = load(config, Loader=Loader)
+    except Exception as exc:
+        console.print(f"[bold red]Error:[/] {exc}")
+        ctx.exit()
+    ctx.obj["config"] = data
+    if data is None or "devices" not in data or not data["devices"]:
+        console.print(
+            f"[bold red]Error:[/] No devices found in the configuration file. Exiting."
+        )
+        ctx.exit()
 
 
 @main.command()
@@ -419,6 +440,7 @@ def start(ctx, yes, firmware):
             ctx.obj["port"],
             ctx.obj["baudrate"],
             firmware,
+            ctx.obj["config"]["devices"],
         )
     except (
         SerialInterfaceException,
@@ -433,7 +455,10 @@ def start(ctx, yes, firmware):
             click.confirm("Do you want to continue?", default=True, abort=True)
         experiment.init()
         ids = experiment.start_ota(list(ctx.obj["devices"]))
-        if sorted(ids) != sorted(ctx.obj["devices"]):
+        if (ctx.obj["devices"] and sorted(ids) != sorted(ctx.obj["devices"])) or (
+            not ctx.obj["devices"]
+            and sorted(ids) != sorted(ctx.obj["config"]["devices"])
+        ):
             print(
                 f"Error: some acknowledgment are missing ({"|".join(sorted(set(ctx.obj["devices"]).difference(set(ids))))}). Aborting."
             )
@@ -458,6 +483,7 @@ def stop(ctx):
         experiment = SwarmitStopExperiment(
             ctx.obj["port"],
             ctx.obj["baudrate"],
+            ctx.obj["config"]["devices"],
         )
     except (
         SerialInterfaceException,
@@ -499,6 +525,7 @@ def status(ctx):
         experiment = SwarmitStatusExperiment(
             ctx.obj["port"],
             ctx.obj["baudrate"],
+            ctx.obj["config"]["devices"],
         )
     except (
         SerialInterfaceException,
