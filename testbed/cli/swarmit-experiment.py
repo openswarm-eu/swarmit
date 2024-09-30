@@ -12,6 +12,8 @@ import structlog
 
 from tqdm import tqdm
 from cryptography.hazmat.primitives import hashes
+from rich.live import Live
+from rich.table import Table
 
 from dotbot.logger import LOGGER
 from dotbot.hdlc import hdlc_encode, HDLCHandler, HDLCState
@@ -28,16 +30,16 @@ SWARMIT_PREAMBLE = bytes([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07])
 # 0x24374c76b5cf8604,
 
 DEVICES_IDS = [
-    # "0x61d2bc40c9864d0a",  # DB_old
-    # "0x7edc9c15171b71d5",  # DB1
-    # "0x298708dfd8e95c9b",  # DB2
-    # "0x6761d5b474d7becd",  # DB3
-    # "0xb9fa5113b820a2df",  # DB4
+    "0x61d2bc40c9864d0a",  # DB_old
+    "0x7edc9c15171b71d5",  # DB1
+    "0x298708dfd8e95c9b",  # DB2
+    "0x6761d5b474d7becd",  # DB3
+    "0xb9fa5113b820a2df",  # DB4
     "0xa2b55971529aa02c",  # DB5
     "0xde297dd2e6d83274",  # DB6
-    # "0xeb4dbfb6ad0f512c",  # DB8
-    # "0x9903ef26257feb31",  # DB10
-    # "0x0809c4bdd6f5e687",  # DB11
+    "0xeb4dbfb6ad0f512c",  # DB8
+    "0x9903ef26257feb31",  # DB10
+    "0x0809c4bdd6f5e687",  # DB11
 ]
 
 
@@ -56,8 +58,17 @@ class RequestType(Enum):
 
     SWARMIT_REQ_EXPERIMENT_START = 1
     SWARMIT_REQ_EXPERIMENT_STOP = 2
-    SWARMIT_REQ_OTA_START = 3
-    SWARMIT_REQ_OTA_CHUNK = 4
+    SWARMIT_REQ_EXPERIMENT_STATUS = 3
+    SWARMIT_REQ_OTA_START = 4
+    SWARMIT_REQ_OTA_CHUNK = 5
+
+
+class StatusType(Enum):
+    """Types of device status."""
+
+    Ready = 0
+    Running = 1
+    Off = 2
 
 
 @dataclass
@@ -304,6 +315,62 @@ class SwarmitMonitorExperiment:
             time.sleep(0.01)
 
 
+class SwarmitStatusExperiment:
+    """Class used to get the status of experiment."""
+
+    def __init__(self, port, baudrate):
+        self.logger = LOGGER.bind(context=__name__)
+        self.hdlc_handler = HDLCHandler()
+        self.serial = SerialInterface(port, baudrate, self.on_byte_received)
+        self.last_deviceid_notification = None
+        # Just write a single byte to fake a DotBot gateway handshake
+        self.serial.write(int(PROTOCOL_VERSION).to_bytes(length=1))
+        self.status_data = dict.fromkeys(DEVICES_IDS, StatusType.Off)
+        self.resp_ids = []
+        self.table = Table()
+        self.table.add_column("Device ID", style="magenta", no_wrap=True)
+        self.table.add_column("Status", style="green")
+
+    def on_byte_received(self, byte):
+        if self.hdlc_handler is None:
+            return
+        self.hdlc_handler.handle_byte(byte)
+        if self.hdlc_handler.state == HDLCState.READY:
+            payload = self.hdlc_handler.payload
+            if not payload:
+                return
+            deviceid_resp = hex(int.from_bytes(payload[0:8], byteorder="little"))
+            if deviceid_resp not in self.resp_ids:
+                self.resp_ids.append(deviceid_resp)
+            event = payload[8]
+            if event == NotificationType.SWARMIT_NOTIFICATION_STATUS.value:
+                status = StatusType(payload[9])
+                self.status_data[deviceid_resp] = status
+                self.table.add_row(
+                    deviceid_resp,
+                    f"{"[bold cyan]" if status == StatusType.Running else "[bold green]"}{status.name}",
+                )
+
+    def status(self):
+        buffer = bytearray()
+        buffer += SWARMIT_PREAMBLE
+        buffer += int("0", 16).to_bytes(length=8, byteorder="little")
+        buffer += int(RequestType.SWARMIT_REQ_EXPERIMENT_STATUS.value).to_bytes(
+            length=1, byteorder="little"
+        )
+        self.serial.write(hdlc_encode(buffer))
+        timeout = 0  # ms
+        with Live(self.table, refresh_per_second=4) as live:
+            while timeout < 10000 and sorted(self.resp_ids) != sorted(DEVICES_IDS):
+                timeout += 1
+                time.sleep(0.0001)
+                live.update(self.table)
+            for device_id, status in self.status_data.items():
+                if status != StatusType.Off:
+                    continue
+                self.table.add_row(device_id, f"[bold red]{status.name}")
+
+
 @click.group()
 @click.option(
     "-p",
@@ -420,6 +487,26 @@ def monitor(ctx):
         experiment.monitor()
     except KeyboardInterrupt:
         print("Stopping monitor.")
+
+
+@main.command()
+@click.pass_context
+def status(ctx):
+    structlog.configure(
+        wrapper_class=structlog.make_filtering_bound_logger(logging.CRITICAL),
+    )
+    try:
+        experiment = SwarmitStatusExperiment(
+            ctx.obj["port"],
+            ctx.obj["baudrate"],
+        )
+    except (
+        SerialInterfaceException,
+        serial.serialutil.SerialException,
+    ) as exc:
+        print(f"Error: {exc}")
+        return
+    experiment.status()
 
 
 if __name__ == "__main__":
