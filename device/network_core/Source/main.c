@@ -19,6 +19,7 @@
 
 #define SWRMT_USER_IMAGE_BASE_ADDRESS       (0x00004000)
 #define GPIO_CHANNELS_COUNT                 (5U)
+#define RADIO_TX_DELAY_MS                   (10)
 
 //=========================== variables =========================================
 
@@ -77,6 +78,14 @@ static void delay_ms(uint32_t ms) {
     }
 }
 
+static void _radio_tx(uint8_t *data, size_t len) {
+    if (RADIO_TX_DELAY_MS) {
+        delay_ms(RADIO_TX_DELAY_MS);
+    }
+    radio_disable();
+    radio_tx(data, len);
+}
+
 //=========================== main ==============================================
 
 int main(void) {
@@ -113,13 +122,32 @@ int main(void) {
             swrmt_request_t *req = (swrmt_request_t *)_app_vars.req_buffer;
             switch (req->type) {
                 case SWRMT_REQ_EXPERIMENT_START:
+                    if (ipc_shared_data.status == SWRMT_EXPERIMENT_RUNNING) {
+                        break;
+                    }
                     NRF_IPC_NS->TASKS_SEND[IPC_CHAN_EXPERIMENT_START] = 1;
                     break;
                 case SWRMT_REQ_EXPERIMENT_STOP:
+                    if (ipc_shared_data.status == SWRMT_EXPERIMENT_READY) {
+                        break;
+                    }
                     NRF_IPC_NS->TASKS_SEND[IPC_CHAN_EXPERIMENT_STOP] = 1;
                     break;
+                case SWRMT_REQ_EXPERIMENT_STATUS:
+                {
+                    swrmt_notification_t notification = {
+                        .device_id = _deviceid(),
+                        .type = SWRMT_NOTIFICATION_STATUS,
+                    };
+                    memcpy(_app_vars.notification_buffer, &notification, sizeof(swrmt_notification_t));
+                    memcpy(_app_vars.notification_buffer + sizeof(swrmt_notification_t), (void *)&ipc_shared_data.status, sizeof(uint8_t));
+                    _radio_tx(_app_vars.notification_buffer, sizeof(swrmt_notification_t) + sizeof(uint8_t));
+                }   break;
                 case SWRMT_REQ_OTA_START:
                 {
+                    if (ipc_shared_data.status == SWRMT_EXPERIMENT_RUNNING) {
+                        break;
+                    }
                     const swrmt_ota_start_pkt_t *pkt = (const swrmt_ota_start_pkt_t *)req->data;
                     // Copy expected hash
                     memcpy(_app_vars.hash, pkt->hash, SWRMT_OTA_SHA256_LENGTH);
@@ -134,6 +162,9 @@ int main(void) {
                 } break;
                 case SWRMT_REQ_OTA_CHUNK:
                 {
+                    if (ipc_shared_data.status == SWRMT_EXPERIMENT_RUNNING) {
+                        break;
+                    }
                     const swrmt_ota_chunk_pkt_t *pkt = (const swrmt_ota_chunk_pkt_t *)req->data;
                     mutex_lock();
                     ipc_shared_data.ota.chunk_index = pkt->index;
@@ -167,12 +198,10 @@ int main(void) {
                     radio_rx();
                     break;
                 case IPC_RADIO_DIS_REQ:
-                    radio_disable();
                     break;
                 case IPC_RADIO_TX_REQ:
                 {
-                    delay_ms(9);
-                    radio_tx((uint8_t *)ipc_shared_data.radio.tx_pdu.buffer, ipc_shared_data.radio.tx_pdu.length);
+                    _radio_tx((uint8_t *)ipc_shared_data.radio.tx_pdu.buffer, ipc_shared_data.radio.tx_pdu.length);
                  }   break;
                 case IPC_RADIO_RSSI_REQ:
                     ipc_shared_data.radio.rssi = radio_rssi();
@@ -195,8 +224,7 @@ int main(void) {
             uint32_t timestamp = _timestamp();
             memcpy(_app_vars.notification_buffer + sizeof(swrmt_notification_t), &timestamp, sizeof(uint32_t));
             memcpy(_app_vars.notification_buffer + sizeof(swrmt_notification_t) + sizeof(uint32_t), (void *)&ipc_shared_data.log, sizeof(ipc_log_data_t));
-            radio_disable();
-            radio_tx(_app_vars.notification_buffer, sizeof(swrmt_notification_t) + sizeof(uint32_t) + sizeof(ipc_log_data_t));
+            _radio_tx(_app_vars.notification_buffer, sizeof(swrmt_notification_t) + sizeof(uint32_t) + sizeof(ipc_log_data_t));
         }
     };
 }

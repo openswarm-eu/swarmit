@@ -13,8 +13,14 @@ static const uint8_t swrmt_preamble[] = {
 
 #define SWRMT_REQ_EXPERIMENT_START  0x01        ///< Start the experiment
 #define SWRMT_REQ_EXPERIMENT_STOP   0x02        ///< Stop the experiment
-#define SWRMT_REQ_OTA_START         0x03        ///< Start OTA
-#define SWRMT_REQ_OTA_CHUNK         0x04        ///< OTA chunk
+#define SWRMT_REQ_EXPERIMENT_STATUS 0x03        ///< Status of the experiment
+#define SWRMT_REQ_OTA_START         0x04        ///< Start OTA
+#define SWRMT_REQ_OTA_CHUNK         0x05        ///< OTA chunk
+
+typedef enum {
+    SWRMT_EXPERIMENT_READY,
+    SWRMT_EXPERIMENT_RUNNING,
+} swrmt_experiment_status_t;
 
 typedef struct __attribute__((packed)) {
     uint8_t         type;                       ///< Request type

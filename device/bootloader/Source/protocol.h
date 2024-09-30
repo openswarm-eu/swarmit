@@ -17,6 +17,11 @@ typedef struct __attribute__((packed)) {
 } swrmt_ota_chunk_pkt_t;
 
 typedef enum {
+    SWRMT_EXPERIMENT_READY,
+    SWRMT_EXPERIMENT_RUNNING,
+} swrmt_experiment_status_t;
+
+typedef enum {
     SWRMT_NOTIFICATION_STATUS,
     SWRMT_NOTIFICATION_OTA_START_ACK,
     SWRMT_NOTIFICATION_OTA_CHUNK_ACK,

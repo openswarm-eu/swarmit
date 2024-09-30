@@ -77,6 +77,7 @@ typedef struct __attribute__((packed)) {
     bool             net_ready; ///< Network core is ready
     bool             net_ack;   ///< Network core acked the latest request
     ipc_req_t        req;       ///< IPC network request
+    uint8_t          status;    ///< Experiment status
     ipc_log_data_t   log;       ///< Log data
     ipc_ota_data_t   ota;       ///< OTA data
     ipc_radio_data_t radio;     ///< Radio shared data

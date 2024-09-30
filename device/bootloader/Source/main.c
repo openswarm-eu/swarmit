@@ -263,6 +263,9 @@ int main(void) {
         setup_ns_user();
         setup_watchdog0();
 
+        // Experiment is running
+        ipc_shared_data.status = SWRMT_EXPERIMENT_RUNNING;
+
         // Set the vector table address prior to jumping to image
         SCB_NS->VTOR = (uint32_t)table;
         __TZ_set_MSP_NS(table->msp);
@@ -281,6 +284,9 @@ int main(void) {
     NRF_P1_S->DIRSET = (1 << 5);
     NRF_P1_S->OUTSET = (1 << 5);
     _bootloader_vars.base_addr = SWARMIT_BASE_ADDRESS;
+
+    // Experiment is ready
+    ipc_shared_data.status = SWRMT_EXPERIMENT_READY;
 
     while (1) {
         __WFE();
