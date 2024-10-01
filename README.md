@@ -37,7 +37,7 @@ provided using the `--config` option.
 Default usage:
 
 ```
-python testbed/cli/swarmit-experiment.py -c ../swarmit-config.yml --help
+python testbed/cli/swarmit-experiment.py --help
 Usage: swarmit-experiment.py [OPTIONS] COMMAND [ARGS]...
 
 Options:
@@ -50,6 +50,7 @@ Options:
   --help                  Show this message and exit.
 
 Commands:
+  flash
   monitor
   start
   status
