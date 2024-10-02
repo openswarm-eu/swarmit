@@ -236,14 +236,6 @@ int main(void) {
     NVIC_ClearPendingIRQ(IPC_IRQn);
     NVIC_SetPriority(IPC_IRQn, IPC_IRQ_PRIORITY);
 
-    // Map P0.29 to network core
-    NRF_P0_S->PIN_CNF[30] = GPIO_PIN_CNF_MCUSEL_NetworkMCU << GPIO_PIN_CNF_MCUSEL_Pos;
-
-    // Map P1.0-4 to network core
-    //for (uint8_t pin = 0; pin < 4; pin++) {
-    //    NRF_P1_S->PIN_CNF[pin] = GPIO_PIN_CNF_MCUSEL_NetworkMCU << GPIO_PIN_CNF_MCUSEL_Pos;
-    //}
-
     // Start the network core
     release_network_core();
 
@@ -281,8 +273,6 @@ int main(void) {
         while (1) {}
     }
 
-    NRF_P1_S->DIRSET = (1 << 5);
-    NRF_P1_S->OUTSET = (1 << 5);
     _bootloader_vars.base_addr = SWARMIT_BASE_ADDRESS;
 
     // Experiment is ready
