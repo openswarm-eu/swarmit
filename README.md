@@ -35,8 +35,8 @@ in the swarm.
 Default usage:
 
 ```
-python testbed/cli/swarmit-experiment.py --help
-Usage: swarmit-experiment.py [OPTIONS] COMMAND [ARGS]...
+swarmit --help
+Usage: swarmit [OPTIONS] COMMAND [ARGS]...
 
 Options:
   -p, --port TEXT         Serial port to use to send the bitstream to the

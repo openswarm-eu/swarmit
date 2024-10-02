@@ -1,0 +1,57 @@
+[build-system]
+requires = [
+    "hatchling>=1.4.1",
+]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+include = [
+    "*.py"
+]
+exclude = [
+    "device/",
+    "sample/",
+]
+
+[project]
+name = "swarmit"
+version = "0.1.0"
+authors = [
+    { name="Alexandre Abadie", email="alexandre.abadie@inria.fr" },
+]
+dependencies = [
+    "click          == 8.1.7",
+    "cryptography   == 43.0.1",
+    "pydotbot       == 0.21.2",
+    "pyserial       == 3.5",
+    "rich           == 13.8.1",
+    "structlog      == 24.4.0",
+    "tqdm           == 4.66.5",
+]
+description = "Run Your Own Robot Swarm Testbed."
+readme = "README.md"
+license = { text="BSD" }
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/DotBots/swarmit"
+"Bug Tracker" = "https://github.com/DotBots/swarmit/issues"
+
+[project.scripts]
+swarmit = "testbed.cli.main:main"
+
+[tool.ruff]
+select = ["E", "F"]
+line-length = 88
+ignore = ["E501"]
+
+[tool.isort]
+multi_line_output = 3  # Use Vertical Hanging Indent
+profile = "black"

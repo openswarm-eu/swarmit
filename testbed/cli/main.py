@@ -20,10 +20,10 @@ from rich.table import Table
 from dotbot.logger import LOGGER
 from dotbot.hdlc import hdlc_encode, HDLCHandler, HDLCState
 from dotbot.protocol import PROTOCOL_VERSION
-from dotbot.serial_interface import SerialInterface, SerialInterfaceException
+from dotbot.serial_interface import SerialInterface, SerialInterfaceException, get_default_port
 
 
-SERIAL_PORT = "/dev/ttyACM0"
+SERIAL_PORT = get_default_port()
 BAUDRATE = 1000000
 CHUNK_SIZE = 128
 SWARMIT_PREAMBLE = bytes([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07])
