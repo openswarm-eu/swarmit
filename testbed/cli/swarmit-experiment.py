@@ -357,7 +357,7 @@ class SwarmitStatus:
         )
         self.serial.write(hdlc_encode(buffer))
         timeout = 0  # ms
-        while timeout < 100:
+        while timeout < 200:
             timeout += 1
             time.sleep(0.0001)
         if self.status_data and display is True:
