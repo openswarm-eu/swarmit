@@ -591,7 +591,8 @@ def monitor(ctx):
 @main.command()
 @click.pass_context
 def status(ctx):
-    swarmit_status(ctx.obj["port"], ctx.obj["baudrate"])
+    if not swarmit_status(ctx.obj["port"], ctx.obj["baudrate"]):
+        click.echo("No devices found.")
 
 
 if __name__ == "__main__":
