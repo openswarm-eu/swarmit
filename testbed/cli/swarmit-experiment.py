@@ -17,8 +17,6 @@ from rich.console import Console
 from rich.live import Live
 from rich.table import Table
 
-from yaml import load, Loader
-
 from dotbot.logger import LOGGER
 from dotbot.hdlc import hdlc_encode, HDLCHandler, HDLCState
 from dotbot.protocol import PROTOCOL_VERSION
@@ -68,7 +66,7 @@ class DataChunk:
     data: bytes
 
 
-class SwarmitFlashExperiment:
+class SwarmitFlash:
     """Class used to flash a firmware."""
 
     def __init__(self, port, baudrate, firmware, known_devices):
@@ -80,9 +78,8 @@ class SwarmitFlashExperiment:
         self.last_acked_index = -1
         self.chunks = []
         self.fw_hash = None
-        self.device_id = None
         self.acked_ids = []
-        # Just write a single byte to fake a DotBot gateway handshake
+        # Just write a single byte to fake a gateway handshake
         self.serial.write(int(PROTOCOL_VERSION).to_bytes(length=1))
 
     def on_byte_received(self, byte):
@@ -153,12 +150,7 @@ class SwarmitFlashExperiment:
                 print(f"Sending start ota notification to {device_id}...")
                 self._send_start_ota(device_id)
                 timeout = 0  # ms
-                self.start_ack_received = False
-                while (
-                    self.start_ack_received is False
-                    and timeout < 10000
-                    and device_id not in self.acked_ids
-                ):
+                while timeout < 10000 and device_id not in self.acked_ids:
                     timeout += 1
                     time.sleep(0.0001)
         return self.acked_ids
@@ -218,7 +210,7 @@ class SwarmitFlashExperiment:
         progress.close()
 
 
-class SwarmitStartExperiment:
+class SwarmitStart:
     """Class used to start an experiment."""
 
     def __init__(self, port, baudrate, known_devices):
@@ -247,7 +239,7 @@ class SwarmitStartExperiment:
                 self._send_start(device_id)
 
 
-class SwarmitStopExperiment:
+class SwarmitStop:
     """Class used to stop an experiment."""
 
     def __init__(self, port, baudrate, known_devices):
@@ -276,7 +268,7 @@ class SwarmitStopExperiment:
                 self._send_stop(device_id)
 
 
-class SwarmitMonitorExperiment:
+class SwarmitMonitor:
     """Class used to monitor an experiment."""
 
     def __init__(self, port, baudrate, device_ids):
@@ -297,7 +289,7 @@ class SwarmitMonitorExperiment:
             if not payload:
                 return
             deviceid = int.from_bytes(payload[0:8], byteorder="little")
-            if deviceid not in self.device_ids:
+            if self.device_ids and deviceid not in self.device_ids:
                 return
             event = payload[8]
             timestamp = int.from_bytes(payload[9:13], byteorder="little")
@@ -320,18 +312,17 @@ class SwarmitMonitorExperiment:
             time.sleep(0.01)
 
 
-class SwarmitStatusExperiment:
+class SwarmitStatus:
     """Class used to get the status of experiment."""
 
-    def __init__(self, port, baudrate, known_devices):
+    def __init__(self, port, baudrate):
         self.logger = LOGGER.bind(context=__name__)
         self.hdlc_handler = HDLCHandler()
         self.serial = SerialInterface(port, baudrate, self.on_byte_received)
-        self.known_devices = known_devices
         self.last_deviceid_notification = None
         # Just write a single byte to fake a DotBot gateway handshake
         self.serial.write(int(PROTOCOL_VERSION).to_bytes(length=1))
-        self.status_data = dict.fromkeys(self.known_devices, StatusType.Off)
+        self.status_data = {}
         self.resp_ids = []
         self.table = Table()
         self.table.add_column("Device ID", style="magenta", no_wrap=True)
@@ -357,7 +348,7 @@ class SwarmitStatusExperiment:
                     f"{"[bold cyan]" if status == StatusType.Running else "[bold green]"}{status.name}",
                 )
 
-    def status(self):
+    def status(self, display=True):
         buffer = bytearray()
         buffer += SWARMIT_PREAMBLE
         buffer += int("0", 16).to_bytes(length=8, byteorder="little")
@@ -366,17 +357,113 @@ class SwarmitStatusExperiment:
         )
         self.serial.write(hdlc_encode(buffer))
         timeout = 0  # ms
-        with Live(self.table, refresh_per_second=4) as live:
-            while timeout < 10000 and sorted(self.resp_ids) != sorted(
-                self.known_devices
-            ):
-                timeout += 1
-                time.sleep(0.0001)
+        while timeout < 100:
+            timeout += 1
+            time.sleep(0.0001)
+        if self.status_data and display is True:
+            with Live(self.table, refresh_per_second=4) as live:
                 live.update(self.table)
-            for device_id, status in self.status_data.items():
-                if status != StatusType.Off:
-                    continue
-                self.table.add_row(device_id, f"[bold red]{status.name}")
+                for device_id, status in self.status_data.items():
+                    if status != StatusType.Off:
+                        continue
+                    self.table.add_row(device_id, f"[bold red]{status.name}")
+        return self.status_data
+
+
+def swarmit_flash(port, baudrate, firmware, yes, devices, ready_devices):
+    try:
+        experiment = SwarmitFlash(port, baudrate, firmware, ready_devices)
+    except (
+        SerialInterfaceException,
+        serial.serialutil.SerialException,
+    ) as exc:
+        console = Console()
+        console.print("[bold red]Error:[/] {exc}")
+        return False
+
+    start_time = time.time()
+    print(f"Image size: {len(experiment.firmware)}B")
+    print("")
+    if yes is False:
+        click.confirm("Do you want to continue?", default=True, abort=True)
+    ids = experiment.init(devices)
+    if (devices and sorted(ids) != sorted(devices)) or (
+        not devices and sorted(ids) != sorted(ready_devices)
+    ):
+        console = Console()
+        console.print(
+            "[bold red]Error:[/] some acknowledgment are missing "
+            f"({", ".join(sorted(set(ready_devices).difference(set(ids))))}). "
+            "Aborting."
+        )
+        return False
+    try:
+        experiment.transfer(devices)
+    except Exception as exc:
+        console = Console()
+        console.print(f"[bold red]Error:[/] transfer of image failed: {exc}")
+        return False
+    print(f"Elapsed: {time.time() - start_time:.3f}s")
+    return True
+
+
+def swarmit_start(port, baudrate, devices, ready_devices):
+    try:
+        experiment = SwarmitStart(port, baudrate, ready_devices)
+    except (
+        SerialInterfaceException,
+        serial.serialutil.SerialException,
+    ) as exc:
+        console = Console()
+        console.print(f"[bold red]Error:[/] {exc}")
+        return
+    experiment.start(devices)
+    print("Experiment started.")
+
+
+def swarmit_stop(port, baudrate, devices, running_devices):
+    try:
+        experiment = SwarmitStop(port, baudrate, running_devices)
+    except (
+        SerialInterfaceException,
+        serial.serialutil.SerialException,
+    ) as exc:
+        console = Console()
+        console.print(f"[bold red]Error:[/] {exc}")
+        return
+    experiment.stop(devices)
+    print("Experiment stopped.")
+
+
+def swarmit_monitor(port, baudrate, devices):
+    try:
+        experiment = SwarmitMonitor(port, baudrate, devices)
+    except (
+        SerialInterfaceException,
+        serial.serialutil.SerialException,
+    ) as exc:
+        console = Console()
+        console.print(f"[bold red]Error:[/] {exc}")
+        return
+    try:
+        experiment.monitor()
+    except KeyboardInterrupt:
+        print("Stopping monitor.")
+
+
+def swarmit_status(port, baudrate, display=True):
+    try:
+        experiment = SwarmitStatus(port, baudrate)
+    except (
+        SerialInterfaceException,
+        serial.serialutil.SerialException,
+    ) as exc:
+        console = Console()
+        console.print(f"[bold red]Error:[/] {exc}")
+        return {}
+    result = experiment.status(display)
+    experiment.serial.stop()
+    return result
 
 
 @click.group()
@@ -399,15 +486,8 @@ class SwarmitStatusExperiment:
     default="",
     help=f"Subset list of devices to interact with, separated with ,",
 )
-@click.option(
-    "-c",
-    "--config",
-    type=click.File(mode="rb", lazy=True),
-    required=False,
-    help=f"Yaml file containing the list of known devices.",
-)
 @click.pass_context
-def main(ctx, port, baudrate, devices, config):
+def main(ctx, port, baudrate, devices):
     if ctx.invoked_subcommand != "monitor":
         # Disable logging if not monitoring
         structlog.configure(
@@ -417,60 +497,38 @@ def main(ctx, port, baudrate, devices, config):
     ctx.obj["port"] = port
     ctx.obj["baudrate"] = baudrate
     ctx.obj["devices"] = [e for e in devices.split(",") if e]
-    console = Console()
-    if config is None:
-        console.print("[bold red]Error:[/] Missing configuration file. Exiting.")
-        ctx.exit()
-    try:
-        data = load(config, Loader=Loader)
-    except Exception as exc:
-        console.print(f"[bold red]Error:[/] {exc}")
-        ctx.exit()
-    ctx.obj["config"] = data
-    if data is None or "devices" not in data or not data["devices"]:
-        console.print(
-            f"[bold red]Error:[/] No devices found in the configuration file. Exiting."
-        )
-        ctx.exit()
 
 
 @main.command()
 @click.pass_context
 def start(ctx):
-    try:
-        experiment = SwarmitStartExperiment(
-            ctx.obj["port"],
-            ctx.obj["baudrate"],
-            ctx.obj["config"]["devices"],
-        )
-    except (
-        SerialInterfaceException,
-        serial.serialutil.SerialException,
-    ) as exc:
-        console = Console()
-        console.print(f"[bold red]Error:[/] {exc}")
-        ctx.exit()
-    experiment.start(list(ctx.obj["devices"]))
-    print("Experiment started.")
+    known_devices = swarmit_status(ctx.obj["port"], ctx.obj["baudrate"], display=False)
+    ready_devices = sorted(
+        [
+            device
+            for device, status in known_devices.items()
+            if status == StatusType.Ready
+        ]
+    )
+    swarmit_start(
+        ctx.obj["port"], ctx.obj["baudrate"], list(ctx.obj["devices"]), ready_devices
+    )
 
 
 @main.command()
 @click.pass_context
 def stop(ctx):
-    try:
-        experiment = SwarmitStopExperiment(
-            ctx.obj["port"],
-            ctx.obj["baudrate"],
-            ctx.obj["config"]["devices"],
-        )
-    except (
-        SerialInterfaceException,
-        serial.serialutil.SerialException,
-    ) as exc:
-        console = Console()
-        console.print(f"[bold red]Error:[/] {exc}")
-        ctx.exit()
-    experiment.stop(list(ctx.obj["devices"]))
+    known_devices = swarmit_status(ctx.obj["port"], ctx.obj["baudrate"], display=False)
+    running_devices = sorted(
+        [
+            device
+            for device, status in known_devices.items()
+            if status == StatusType.Running
+        ]
+    )
+    swarmit_stop(
+        ctx.obj["port"], ctx.obj["baudrate"], list(ctx.obj["devices"]), running_devices
+    )
 
 
 @main.command()
@@ -490,99 +548,50 @@ def stop(ctx):
 @click.pass_context
 def flash(ctx, yes, start, firmware):
     console = Console()
-    try:
-        experiment = SwarmitFlashExperiment(
-            ctx.obj["port"],
-            ctx.obj["baudrate"],
-            firmware,
-            ctx.obj["config"]["devices"],
-        )
-    except (
-        SerialInterfaceException,
-        serial.serialutil.SerialException,
-    ) as exc:
-        console.print("[bold red]Error:[/] {exc}")
-        return
     if firmware is None:
         console.print("[bold red]Error:[/] Missing firmware file. Exiting.")
         ctx.exit()
-
-    start_time = time.time()
-    print(f"Image size: {len(experiment.firmware)}B")
-    print("")
-    if yes is False:
-        click.confirm("Do you want to continue?", default=True, abort=True)
-    ids = experiment.init(list(ctx.obj["devices"]))
-    if (ctx.obj["devices"] and sorted(ids) != sorted(ctx.obj["devices"])) or (
-        not ctx.obj["devices"] and sorted(ids) != sorted(ctx.obj["config"]["devices"])
-    ):
-        console.print(
-            "[bold red]Error:[/] some acknowledgment are missing "
-            f"({"|".join(sorted(set(ctx.obj["devices"]).difference(set(ids))))}). "
-            "Aborting."
-        )
-        ctx.exit()
-    try:
-        experiment.transfer(list(ctx.obj["devices"]))
-    except Exception as exc:
-        console.print(f"[bold red]Error:[/] transfer of image failed: {exc}")
+    known_devices = swarmit_status(ctx.obj["port"], ctx.obj["baudrate"], display=False)
+    ready_devices = sorted(
+        [
+            device
+            for device, status in known_devices.items()
+            if status == StatusType.Ready
+        ]
+    )
+    if not ready_devices:
         return
-    print(f"Elapsed: {time.time() - start_time:.3f}s")
+    if (
+        swarmit_flash(
+            ctx.obj["port"],
+            ctx.obj["baudrate"],
+            firmware,
+            yes,
+            list(ctx.obj["devices"]),
+            ready_devices,
+        )
+        is False
+    ):
+        return
     if start is True:
-        try:
-            experiment = SwarmitStartExperiment(
-                ctx.obj["port"],
-                ctx.obj["baudrate"],
-                ctx.obj["config"]["devices"],
-            )
-        except (
-            SerialInterfaceException,
-            serial.serialutil.SerialException,
-        ) as exc:
-            console.print(f"[bold red]Error:[/] {exc}")
-            ctx.exit()
-        experiment.start(list(ctx.obj["devices"]))
+        swarmit_start(
+            ctx.obj["port"],
+            ctx.obj["baudrate"],
+            list(ctx.obj["devices"]),
+            ready_devices,
+        )
 
 
 @main.command()
 @click.pass_context
 def monitor(ctx):
-    try:
-        experiment = SwarmitMonitorExperiment(
-            ctx.obj["port"],
-            ctx.obj["baudrate"],
-            list(ctx.obj["devices"]),
-        )
-    except (
-        SerialInterfaceException,
-        serial.serialutil.SerialException,
-    ) as exc:
-        console = Console()
-        console.print(f"[bold red]Error:[/] {exc}")
-        ctx.exit()
-    try:
-        experiment.monitor()
-    except KeyboardInterrupt:
-        print("Stopping monitor.")
+    swarmit_monitor(ctx.obj["port"], ctx.obj["baudrate"], ctx.obj["devices"])
 
 
 @main.command()
 @click.pass_context
 def status(ctx):
-    try:
-        experiment = SwarmitStatusExperiment(
-            ctx.obj["port"],
-            ctx.obj["baudrate"],
-            ctx.obj["config"]["devices"],
-        )
-    except (
-        SerialInterfaceException,
-        serial.serialutil.SerialException,
-    ) as exc:
-        console = Console()
-        console.print(f"[bold red]Error:[/] {exc}")
-        ctx.exit()
-    experiment.status()
+    swarmit_status(ctx.obj["port"], ctx.obj["baudrate"])
 
 
 if __name__ == "__main__":

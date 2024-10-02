@@ -28,11 +28,9 @@ The device is now ready.
 
 ### Python CLI script
 
-The Python CLI script provides commands for starting and stopping user code on
-the device, as well as monitoring and checking the status of devices in the swarm.
-
-A YAML configuration file that contains the list of known devices IDs must be
-provided using the `--config` option.
+The Python CLI script provides commands for flashing, starting and stopping user
+code on the device, as well as monitoring and checking the status of devices
+in the swarm.
 
 Default usage:
 
@@ -46,7 +44,6 @@ Options:
   -b, --baudrate INTEGER  Serial port baudrate. Default: 1000000.
   -d, --devices TEXT      Subset list of devices to interact with, separated
                           with ,
-  -c, --config FILENAME   Yaml file containing the list of known devices.
   --help                  Show this message and exit.
 
 Commands:
