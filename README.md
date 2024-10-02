@@ -32,6 +32,12 @@ The Python CLI script provides commands for flashing, starting and stopping user
 code on the device, as well as monitoring and checking the status of devices
 in the swarm.
 
+The SwarmIT Python script is available on PyPI. Install it using:
+
+```
+pip install swarmit
+```
+
 Default usage:
 
 ```

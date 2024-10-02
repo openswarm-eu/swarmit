@@ -14,3 +14,6 @@
 
 # Segger Studio output directory
 Output/
+
+# Python package dist
+dist/
