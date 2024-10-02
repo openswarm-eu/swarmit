@@ -157,8 +157,6 @@ int main(void) {
                     ipc_shared_data.ota.image_size = pkt->image_size;
                     mutex_unlock();
                     NRF_IPC_NS->TASKS_SEND[IPC_CHAN_OTA_START] = 1;
-
-                    NRF_P0_NS->OUT ^= (1 << 29);
                 } break;
                 case SWRMT_REQ_OTA_CHUNK:
                 {
@@ -172,7 +170,6 @@ int main(void) {
                     memcpy((uint8_t *)ipc_shared_data.ota.chunk, pkt->chunk, pkt->chunk_size);
                     mutex_unlock();
                     NRF_IPC_NS->TASKS_SEND[IPC_CHAN_OTA_CHUNK] = 1;
-                    NRF_P0_NS->OUT ^= (1 << 29);
                 } break;
                 default:
                     break;
