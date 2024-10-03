@@ -92,8 +92,5 @@
       <file file_name="System/startup.c" />
       <file file_name="System/system_init.c" />
     </folder>
-    <folder Name="System Files">
-      <file file_name="MemoryMap.xml" />
-    </folder>
   </project>
 </solution>
