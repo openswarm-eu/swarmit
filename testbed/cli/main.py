@@ -79,8 +79,6 @@ class SwarmitFlash:
         self.chunks = []
         self.fw_hash = None
         self.acked_ids = []
-        # Just write a single byte to fake a gateway handshake
-        self.serial.write(int(PROTOCOL_VERSION).to_bytes(length=1))
 
     def on_byte_received(self, byte):
         self.hdlc_handler.handle_byte(byte)
