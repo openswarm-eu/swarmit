@@ -26,13 +26,27 @@ and [bootloader.emProject](device/bootloader/bootloader.emProject) in SES
 
 The device is now ready.
 
+### Gateway
+
+The communication between the computer and the swarm devices is performed via a
+gateway board connected via USB to the computer.
+The gateway board is a Nordic nRF53840DK.
+
+The firmware to run on the gateway can also be compiled and flash using SES.
+The SES project to open is located at [gateway.emProject](gateway/gateway.emProject).
+
+After flashing the gateway firmware, LED1 on the DK should blink fast during 1s.
+
 ### Python CLI script
 
 The Python CLI script provides commands for flashing, starting and stopping user
 code on the device, as well as monitoring and checking the status of devices
 in the swarm.
 
-The SwarmIT Python script is available on PyPI. Install it using:
+The Python CLI script connects via a virtual COM port to the gateway connected to
+the computer.
+
+The Python CLI script is available on PyPI. Install it using:
 
 ```
 pip install swarmit
