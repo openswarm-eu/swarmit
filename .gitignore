@@ -17,3 +17,6 @@ Output/
 
 # Python package dist
 dist/
+
+# Virtual env folder
+.venv/
