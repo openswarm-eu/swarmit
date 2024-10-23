@@ -343,7 +343,7 @@ class SwarmitStatus:
                 self.status_data[deviceid_resp] = status
                 self.table.add_row(
                     deviceid_resp,
-                    f"{"[bold cyan]" if status == StatusType.Running else "[bold green]"}{status.name}",
+                    f'{"[bold cyan]" if status == StatusType.Running else "[bold green]"}{status.name}',
                 )
 
     def status(self, display=True):
@@ -391,7 +391,7 @@ def swarmit_flash(port, baudrate, firmware, yes, devices, ready_devices):
         console = Console()
         console.print(
             "[bold red]Error:[/] some acknowledgment are missing "
-            f"({", ".join(sorted(set(ready_devices).difference(set(ids))))}). "
+            f'({", ".join(sorted(set(ready_devices).difference(set(ids))))}). '
             "Aborting."
         )
         return False
