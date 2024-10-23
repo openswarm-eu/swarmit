@@ -20,7 +20,11 @@ from rich.table import Table
 from dotbot.logger import LOGGER
 from dotbot.hdlc import hdlc_encode, HDLCHandler, HDLCState
 from dotbot.protocol import PROTOCOL_VERSION
-from dotbot.serial_interface import SerialInterface, SerialInterfaceException, get_default_port
+from dotbot.serial_interface import (
+    SerialInterface,
+    SerialInterfaceException,
+    get_default_port,
+)
 
 
 SERIAL_PORT = get_default_port()
