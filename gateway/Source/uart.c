@@ -19,7 +19,7 @@
 
 //=========================== defines ==========================================
 
-#define DB_UARTE_CHUNK_SIZE (64U)
+#define UARTE_CHUNK_SIZE (64U)
 
 typedef struct {
     NRF_UARTE_Type *p;
@@ -51,8 +51,8 @@ static uart_vars_t _uart_vars[UARTE_COUNT] = { 0 };  ///< variable handling the 
 void db_uart_init(uart_t uart, const gpio_t *rx_pin, const gpio_t *tx_pin, uint32_t baudrate, uart_rx_cb_t callback) {
 
     // configure UART pins (RX as input, TX as output);
-    db_gpio_init(rx_pin, DB_GPIO_IN_PU);
-    db_gpio_init(tx_pin, DB_GPIO_OUT);
+    db_gpio_init(rx_pin, GPIO_IN_PU);
+    db_gpio_init(tx_pin, GPIO_OUT);
 
     // configure UART
     _devs[uart].p->CONFIG   = 0;
@@ -137,18 +137,18 @@ void db_uart_init(uart_t uart, const gpio_t *rx_pin, const gpio_t *tx_pin, uint3
 
 void db_uart_write(uart_t uart, uint8_t *buffer, size_t length) {
     uint8_t pos = 0;
-    // Send DB_UARTE_CHUNK_SIZE (64 Bytes) maximum at a time
-    while ((pos % DB_UARTE_CHUNK_SIZE) == 0 && pos < length) {
+    // Send UARTE_CHUNK_SIZE (64 Bytes) maximum at a time
+    while ((pos % UARTE_CHUNK_SIZE) == 0 && pos < length) {
         _devs[uart].p->EVENTS_ENDTX = 0;
         _devs[uart].p->TXD.PTR      = (uint32_t)&buffer[pos];
-        if ((pos + DB_UARTE_CHUNK_SIZE) > length) {
+        if ((pos + UARTE_CHUNK_SIZE) > length) {
             _devs[uart].p->TXD.MAXCNT = length - pos;
         } else {
-            _devs[uart].p->TXD.MAXCNT = DB_UARTE_CHUNK_SIZE;
+            _devs[uart].p->TXD.MAXCNT = UARTE_CHUNK_SIZE;
         }
         _devs[uart].p->TASKS_STARTTX = 1;
         while (_devs[uart].p->EVENTS_ENDTX == 0) {}
-        pos += DB_UARTE_CHUNK_SIZE;
+        pos += UARTE_CHUNK_SIZE;
     }
 }
 

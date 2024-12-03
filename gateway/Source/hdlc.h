@@ -20,10 +20,10 @@
 
 /// Internal state of the HDLC decoder
 typedef enum {
-    DB_HDLC_STATE_IDLE,       ///< Waiting for incoming HDLC frames
-    DB_HDLC_STATE_RECEIVING,  ///< An HDLC frame is being received
-    DB_HDLC_STATE_READY,      ///< An HDLC frame is ready to be decoded
-    DB_HDLC_STATE_ERROR,      ///< The FCS value is invalid
+    HDLC_STATE_IDLE,       ///< Waiting for incoming HDLC frames
+    HDLC_STATE_RECEIVING,  ///< An HDLC frame is being received
+    HDLC_STATE_READY,      ///< An HDLC frame is ready to be decoded
+    HDLC_STATE_ERROR,      ///< The FCS value is invalid
 } db_hdlc_state_t;
 
 //=========================== public ===========================================

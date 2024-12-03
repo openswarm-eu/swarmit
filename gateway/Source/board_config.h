@@ -19,49 +19,49 @@
  * @name    Debug pins definitions
  * @{
  */
-#define DB_DEBUG1_PORT 0
-#define DB_DEBUG1_PIN  13
-#define DB_DEBUG2_PORT 0
-#define DB_DEBUG2_PIN  14
-#define DB_DEBUG3_PORT 0
-#define DB_DEBUG3_PIN  15
+#define DEBUG1_PORT 0
+#define DEBUG1_PIN  13
+#define DEBUG2_PORT 0
+#define DEBUG2_PIN  14
+#define DEBUG3_PORT 0
+#define DEBUG3_PIN  15
 /** @} */
 
 /**
  * @name    LEDs pins definitions
  * @{
  */
-#define DB_LED1_PORT DB_DEBUG1_PORT
-#define DB_LED1_PIN  DB_DEBUG1_PIN
-#define DB_LED2_PORT DB_DEBUG2_PORT
-#define DB_LED2_PIN  DB_DEBUG2_PIN
-#define DB_LED3_PORT DB_DEBUG3_PORT
-#define DB_LED3_PIN  DB_DEBUG3_PIN
+#define LED1_PORT DEBUG1_PORT
+#define LED1_PIN  DEBUG1_PIN
+#define LED2_PORT DEBUG2_PORT
+#define LED2_PIN  DEBUG2_PIN
+#define LED3_PORT DEBUG3_PORT
+#define LED3_PIN  DEBUG3_PIN
 /** @} */
 
 /**
  * @name    UART pins definitions
  * @{
  */
-#define DB_UART_RX_PORT 0
-#define DB_UART_RX_PIN  8
-#define DB_UART_TX_PORT 0
-#define DB_UART_TX_PIN  6
+#define UART_RX_PORT 0
+#define UART_RX_PIN  8
+#define UART_TX_PORT 0
+#define UART_TX_PIN  6
 /** @} */
 
 ///! LED1 pin
-static const gpio_t db_led1 = { .port = DB_LED1_PORT, .pin = DB_LED1_PIN };
+static const gpio_t db_led1 = { .port = LED1_PORT, .pin = LED1_PIN };
 
 ///! LED2 pin
-static const gpio_t db_led2 = { .port = DB_LED2_PORT, .pin = DB_LED2_PIN };
+static const gpio_t db_led2 = { .port = LED2_PORT, .pin = LED2_PIN };
 
 ///! LED3 pin
-static const gpio_t db_led3 = { .port = DB_LED3_PORT, .pin = DB_LED3_PIN };
+static const gpio_t db_led3 = { .port = LED3_PORT, .pin = LED3_PIN };
 
 ///! UART RX pin
-static const gpio_t db_uart_rx = { .port = DB_UART_RX_PORT, .pin = DB_UART_RX_PIN };
+static const gpio_t db_uart_rx = { .port = UART_RX_PORT, .pin = UART_RX_PIN };
 
 ///! UART TX pin
-static const gpio_t db_uart_tx = { .port = DB_UART_TX_PORT, .pin = DB_UART_TX_PIN };
+static const gpio_t db_uart_tx = { .port = UART_TX_PORT, .pin = UART_TX_PIN };
 
 #endif

@@ -21,26 +21,26 @@
 /**
  * Enable a pin as output, must be called once before using the other macros below
  */
-#define DB_GPIO_ENABLE(port, pin) NRF_P##port->DIRSET = (1 << pin)  ///< Enable a pin as output
-#define DB_GPIO_ON(port, pin)     NRF_P##port->OUTSET = (1 << pin)  ///< Turn on the pin
-#define DB_GPIO_OFF(port, pin)    NRF_P##port->OUTCLR = (1 << pin)  ///< Turn off the pin
-#define DB_GPIO_TOGGLE(port, pin) NRF_P##port->OUT ^= (1 << pin)    ///< Toggle the pin
+#define GPIO_ENABLE(port, pin) NRF_P##port->DIRSET = (1 << pin)  ///< Enable a pin as output
+#define GPIO_ON(port, pin)     NRF_P##port->OUTSET = (1 << pin)  ///< Turn on the pin
+#define GPIO_OFF(port, pin)    NRF_P##port->OUTCLR = (1 << pin)  ///< Turn off the pin
+#define GPIO_TOGGLE(port, pin) NRF_P##port->OUT ^= (1 << pin)    ///< Toggle the pin
 
 typedef void (*gpio_cb_t)(void *ctx);  ///< Callback function prototype, it is called on each gpio interrupt
 
 /// GPIO mode
 typedef enum {
-    DB_GPIO_OUT,    ///< Floating output
-    DB_GPIO_IN,     ///< Floating input
-    DB_GPIO_IN_PU,  ///< Pull up input
-    DB_GPIO_IN_PD,  ///< Pull down input
+    GPIO_OUT,    ///< Floating output
+    GPIO_IN,     ///< Floating input
+    GPIO_IN_PU,  ///< Pull up input
+    GPIO_IN_PD,  ///< Pull down input
 } gpio_mode_t;
 
 /// GPIO interrupt edge
 typedef enum {
-    DB_GPIO_IRQ_EDGE_RISING  = GPIOTE_CONFIG_POLARITY_LoToHi,  ///< Rising edge
-    DB_GPIO_IRQ_EDGE_FALLING = GPIOTE_CONFIG_POLARITY_HiToLo,  ///< Falling edge
-    DB_GPIO_IRQ_EDGE_BOTH    = GPIOTE_CONFIG_POLARITY_Toggle,  ///< Both falling and rising edges
+    GPIO_IRQ_EDGE_RISING  = GPIOTE_CONFIG_POLARITY_LoToHi,  ///< Rising edge
+    GPIO_IRQ_EDGE_FALLING = GPIOTE_CONFIG_POLARITY_HiToLo,  ///< Falling edge
+    GPIO_IRQ_EDGE_BOTH    = GPIOTE_CONFIG_POLARITY_Toggle,  ///< Both falling and rising edges
 } gpio_irq_edge_t;
 
 /// GPIO instance
