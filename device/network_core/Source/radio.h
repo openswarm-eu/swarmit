@@ -6,13 +6,16 @@
  * @ingroup     bsp
  * @brief       Control the radio peripheral
  *
- * This radio driver supports BLE 1MBit, 2MBit, Long Range 125KBit and Long Range 500KBit.
+ * This radio driver supports BLE 1Mbit, 2Mbit, Long Range 125Kbit, Long Range 500Kbit
+ * and IEEE 802.15.4 250Kbit
  *
  * @{
  * @file
  * @author Said Alvarado-Marin <said-alexander.alvarado-marin@inria.fr>
  * @author Alexandre Abadie <alexandre.abadie@inria.fr>
- * @copyright Inria, 2022-2023
+ * @author Diego Badillo-San-Juan <diego.badillo-san-juan@inria.fr>
+ *
+ * @copyright Inria, 2022-2024
  * @}
  */
 
@@ -25,13 +28,17 @@
 #define DEFAULT_NETWORK_ADDRESS 0x12345678UL  ///< Default network address
 #endif
 
-/// BLE modes supported by the radio
+#define BLE_PAYLOAD_MAX_LENGTH        UINT8_MAX
+#define IEEE802154_PAYLOAD_MAX_LENGTH (125UL)  ///< Total usable payload for IEEE 802.15.4 is 125 octets (PSDU) when CRC is activated
+
+/// Modes supported by the radio
 typedef enum {
     RADIO_BLE_1MBit,
     RADIO_BLE_2MBit,
     RADIO_BLE_LR125Kbit,
     RADIO_BLE_LR500Kbit,
-} radio_ble_mode_t;
+    RADIO_IEEE802154_250Kbit,
+} radio_mode_t;
 
 typedef void (*radio_cb_t)(uint8_t *packet, uint8_t length);  ///< Function pointer to the callback function called on packet receive
 
@@ -41,13 +48,13 @@ typedef void (*radio_cb_t)(uint8_t *packet, uint8_t length);  ///< Function poin
  * @brief Initializes the RADIO peripheral
  *
  * After this function you must explicitly set the frequency of the radio
- * with the db_radio_set_frequency function.
+ * with the radio_set_frequency function.
  *
  * @param[in] callback pointer to a function that will be called each time a packet is received.
- * @param[in] mode     BLE mode used by the radio (1MBit, 2MBit, LR125KBit, LR500Kbit)
+ * @param[in] mode     Mode used by the radio BLE (1MBit, 2MBit, LR125KBit, LR500Kbit) or IEEE 802.15.4 (250Kbit)
  *
  */
-void radio_init(radio_cb_t callback, radio_ble_mode_t mode);
+void radio_init(radio_cb_t callback, radio_mode_t mode);
 
 /**
  * @brief Set the tx-rx frequency of the radio, by the following formula
@@ -61,9 +68,13 @@ void radio_set_frequency(uint8_t freq);
 /**
  * @brief Set the physical channel used of the radio
  *
+ * BLE channels in the interval [0-39]
  * Channels 37, 38 and 39 are BLE advertising channels.
  *
- * @param[in] channel BLE channel used by the radio [0-39]
+ * IEEE 802.15.4 in the interval [11 - 26]
+ * Channels range from 2405 MHz (channel 11) to 2480 MHz (channel 26)
+ *
+ * @param[in] channel   Channel used by the radio
  */
 void radio_set_channel(uint8_t channel);
 
@@ -78,10 +89,10 @@ void radio_set_network_address(uint32_t addr);
  * @brief Sends a single packet through the Radio
  *
  * NOTE: Must configure the radio and the frequency before calling this function.
- * (with the functions db_radio_init db_radio_set_frequency).
+ * (with the functions radio_init radio_set_frequency).
  *
  * NOTE: The radio must not be receiving packets when calling this function.
- * (first call db_radio_disable if needed)
+ * (first call radio_disable if needed)
  *
  * @param[in] packet pointer to the array of data to send over the radio (max size = 32)
  * @param[in] length Number of bytes to send (max size = 32)
@@ -93,7 +104,7 @@ void radio_tx(const uint8_t *packet, uint8_t length);
  * @brief Starts Receiving packets through the Radio
  *
  * NOTE: Must configure the radio and the frequency before calling this function.
- * (with the functions db_radio_init db_radio_set_frequency).
+ * (with the functions radio_init radio_set_frequency).
  *
  */
 void radio_rx(void);

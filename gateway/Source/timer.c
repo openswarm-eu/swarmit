@@ -65,13 +65,13 @@ static timer_vars_t _timer_vars[RTC_COUNT] = { 0 };
 
 //=========================== public ===========================================
 
-void db_timer_init(timer_t timer) {
+void timer_init(timer_t timer) {
     // No delay is running after initialization
     _timer_vars[timer].running = false;
 
 #if !defined(USE_SWARMIT)
     // Configure and start Low Frequency clock
-    db_lfclk_init();
+    lfclk_init();
 #endif
 
     // Configure the RTC
@@ -85,11 +85,11 @@ void db_timer_init(timer_t timer) {
     _devs[timer].p->TASKS_START = 1;
 }
 
-uint32_t db_timer_ticks(timer_t timer) {
+uint32_t timer_ticks(timer_t timer) {
     return _devs[timer].p->COUNTER;
 }
 
-void db_timer_set_periodic_ms(timer_t timer, uint8_t channel, uint32_t ms, timer_cb_t cb) {
+void timer_set_periodic_ms(timer_t timer, uint8_t channel, uint32_t ms, timer_cb_t cb) {
     assert(channel >= 0 && channel < _devs[timer].cc_num);  // Make sure the required channel is correct
     assert(cb);                                             // Make sure the callback function is valid
 
@@ -100,7 +100,7 @@ void db_timer_set_periodic_ms(timer_t timer, uint8_t channel, uint32_t ms, timer
     _devs[timer].p->CC[channel]                             = _devs[timer].p->COUNTER + _timer_vars[timer].timer_callback[channel].period_ticks;
 }
 
-void db_timer_set_oneshot_ticks(timer_t timer, uint8_t channel, uint32_t ticks, timer_cb_t cb) {
+void timer_set_oneshot_ticks(timer_t timer, uint8_t channel, uint32_t ticks, timer_cb_t cb) {
     assert(channel >= 0 && channel < _devs[timer].cc_num);  // Make sure the required channel is correct
     assert(cb);                                             // Make sure the callback function is valid
 
@@ -111,15 +111,15 @@ void db_timer_set_oneshot_ticks(timer_t timer, uint8_t channel, uint32_t ticks, 
     _devs[timer].p->CC[channel]                             = _devs[timer].p->COUNTER + _timer_vars[timer].timer_callback[channel].period_ticks;
 }
 
-void db_timer_set_oneshot_ms(timer_t timer, uint8_t channel, uint32_t ms, timer_cb_t cb) {
-    db_timer_set_oneshot_ticks(timer, channel, _ms_to_ticks(ms), cb);
+void timer_set_oneshot_ms(timer_t timer, uint8_t channel, uint32_t ms, timer_cb_t cb) {
+    timer_set_oneshot_ticks(timer, channel, _ms_to_ticks(ms), cb);
 }
 
-void db_timer_set_oneshot_s(timer_t timer, uint8_t channel, uint32_t s, timer_cb_t cb) {
-    db_timer_set_oneshot_ticks(timer, channel, s * 32768, cb);
+void timer_set_oneshot_s(timer_t timer, uint8_t channel, uint32_t s, timer_cb_t cb) {
+    timer_set_oneshot_ticks(timer, channel, s * 32768, cb);
 }
 
-void db_timer_delay_ticks(timer_t timer, uint32_t ticks) {
+void timer_delay_ticks(timer_t timer, uint32_t ticks) {
     _devs[timer].p->CC[_devs[timer].cc_num] = _devs[timer].p->COUNTER + ticks;
     _timer_vars[timer].running              = true;
     while (_timer_vars[timer].running) {
@@ -132,12 +132,12 @@ void db_timer_delay_ticks(timer_t timer, uint32_t ticks) {
     }
 }
 
-void db_timer_delay_ms(timer_t timer, uint32_t ms) {
-    db_timer_delay_ticks(timer, _ms_to_ticks(ms));
+void timer_delay_ms(timer_t timer, uint32_t ms) {
+    timer_delay_ticks(timer, _ms_to_ticks(ms));
 }
 
-void db_timer_delay_s(timer_t timer, uint32_t s) {
-    db_timer_delay_ticks(timer, s * 32768);
+void timer_delay_s(timer_t timer, uint32_t s) {
+    timer_delay_ticks(timer, s * 32768);
 }
 
 //=========================== private ==========================================

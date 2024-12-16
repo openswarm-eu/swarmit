@@ -73,14 +73,17 @@
       <file file_name="Setup/MemoryMap.xml" />
     </folder>
     <folder Name="Source">
+      <file file_name="Source/device.h" />
       <file file_name="Source/ipc.c" />
       <file file_name="Source/ipc.h" />
       <file file_name="Source/main.c" />
       <file file_name="Source/nvmc.c" />
       <file file_name="Source/nvmc.h" />
+      <file file_name="Source/protocol.c" />
       <file file_name="Source/protocol.h" />
-      <file file_name="Source/radio.c" />
       <file file_name="Source/radio.h" />
+      <file file_name="Source/tdma_client.c" />
+      <file file_name="Source/tdma_client.h" />
       <file file_name="Source/tz.c" />
       <file file_name="Source/tz.h" />
     </folder>

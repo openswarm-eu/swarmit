@@ -81,14 +81,23 @@
       <file file_name="Source/board_config.h" />
       <file file_name="Source/clock.h" />
       <file file_name="Source/clock.c" />
+      <file file_name="Source/device.h" />
       <file file_name="Source/gpio.h" />
       <file file_name="Source/gpio.c" />
       <file file_name="Source/hdlc.h" />
       <file file_name="Source/hdlc.c" />
+      <file file_name="Source/protocol.h" />
+      <file file_name="Source/protocol.c" />
       <file file_name="Source/radio.h" />
       <file file_name="Source/radio.c" />
+      <file file_name="Source/rng.h" />
+      <file file_name="Source/rng.c" />
+      <file file_name="Source/tdma_server.h" />
+      <file file_name="Source/tdma_server.c" />
       <file file_name="Source/timer.h" />
       <file file_name="Source/timer.c" />
+      <file file_name="Source/timer_hf.h" />
+      <file file_name="Source/timer_hf.c" />
       <file file_name="Source/uart.h" />
       <file file_name="Source/uart.c" />
     </folder>

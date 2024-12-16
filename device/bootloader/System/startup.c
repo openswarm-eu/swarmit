@@ -19,6 +19,7 @@ extern __NO_RETURN int main(void);
 
 // Import symbols defined by the SEGGER linker
 extern void __SEGGER_RTL_init_heap(void *ptr, size_t len);
+__attribute__ ((weak, alias("Dummy_Handler"))) void exit(int status);
 
 extern uint32_t __data_load_start__;
 extern uint32_t __data_start__;
