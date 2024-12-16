@@ -17,6 +17,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "radio.h"
+#include "tdma_client.h"
+#include "protocol.h"
 
 #define IPC_IRQ_PRIORITY (1)
 
@@ -24,14 +26,13 @@
 
 typedef enum {
     IPC_REQ_NONE,        ///< Sorry, but nothing
-    IPC_RADIO_INIT_REQ,  ///< Request for radio initialization
-    IPC_RADIO_FREQ_REQ,  ///< Request for radio set frequency
-    IPC_RADIO_CHAN_REQ,  ///< Request for radio set channel
-    IPC_RADIO_ADDR_REQ,  ///< Request for radio set network address
-    IPC_RADIO_RX_REQ,    ///< Request for radio rx
-    IPC_RADIO_DIS_REQ,   ///< Request for radio disable
-    IPC_RADIO_TX_REQ,    ///< Request for radio tx
-    IPC_RADIO_RSSI_REQ,  ///< Request for RSSI
+    IPC_TDMA_CLIENT_INIT_REQ,        ///< Request for TDMA client initialization
+    IPC_TDMA_CLIENT_SET_TABLE_REQ,   ///< Request for setting the TDMA client timing table
+    IPC_TDMA_CLIENT_GET_TABLE_REQ,   ///< Request for reading the TDMA client timing table
+    IPC_TDMA_CLIENT_TX_REQ,          ///< Request for a TDMA client TX
+    IPC_TDMA_CLIENT_FLUSH_REQ,       ///< Request for flushing the TDMA client message buffer
+    IPC_TDMA_CLIENT_EMPTY_REQ,       ///< Request for erasing the TDMA client message buffer
+    IPC_TDMA_CLIENT_STATUS_REQ,      ///< Request for reading the TDMA client driver status
 } ipc_req_t;
 
 typedef enum {
@@ -50,16 +51,6 @@ typedef struct __attribute__((packed)) {
 } ipc_radio_pdu_t;
 
 typedef struct __attribute__((packed)) {
-    radio_ble_mode_t    mode;       ///< db_radio_init function parameters
-    uint8_t             frequency;  ///< db_set_frequency function parameters
-    uint8_t             channel;    ///< db_set_channel function parameters
-    uint32_t            addr;       ///< db_set_network_address function parameters
-    ipc_radio_pdu_t     tx_pdu;     ///< PDU to send
-    ipc_radio_pdu_t     rx_pdu;     ///< Received pdu
-    int8_t              rssi;       ///< RSSI value
-} ipc_radio_data_t;
-
-typedef struct __attribute__((packed)) {
     uint8_t length;
     uint8_t data[INT8_MAX];
 } ipc_log_data_t;
@@ -72,19 +63,26 @@ typedef struct __attribute__((packed)) {
 } ipc_ota_data_t;
 
 typedef struct __attribute__((packed)) {
+    radio_mode_t              mode;                ///< radio_init function parameters
+    application_type_t           default_radio_app;   ///< radio_init function parameters
+    uint8_t                      frequency;           ///< db_set_frequency function parameters
+    tdma_client_table_t          table_set;           ///< db_tdma_client_set_table function parameter
+    tdma_client_table_t          table_get;           ///< db_tdma_client_get_table function parameter
+    ipc_radio_pdu_t              tx_pdu;              ///< PDU to send
+    ipc_radio_pdu_t              rx_pdu;              ///< Received pdu
+    tdma_registration_state_t registration_state;  ///< db_tdma_client_get_status return value
+} ipc_tdma_client_data_t;
+
+
+typedef struct __attribute__((packed)) {
     bool             net_ready; ///< Network core is ready
     bool             net_ack;   ///< Network core acked the latest request
     ipc_req_t        req;       ///< IPC network request
     uint8_t          status;    ///< Experiment status
     ipc_log_data_t   log;       ///< Log data
     ipc_ota_data_t   ota;       ///< OTA data
-    ipc_radio_data_t radio;     ///< Radio shared data
+    ipc_tdma_client_data_t tdma_client;  ///< TDMA client drv shared data
 } ipc_shared_data_t;
-
-/**
- * @brief Variable in RAM containing the shared data structure
- */
-volatile __attribute__((used, section(".shared_data"))) ipc_shared_data_t ipc_shared_data;
 
 /**
  * @brief Lock the mutex, blocks until the mutex is locked

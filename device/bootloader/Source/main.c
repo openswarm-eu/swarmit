@@ -18,12 +18,13 @@
 #include "ipc.h"
 #include "nvmc.h"
 #include "protocol.h"
-#include "radio.h"
 #include "tz.h"
 
 #define SWARMIT_BASE_ADDRESS    (0x00004000);
+#define RADIO_FREQ              (8U)
+#define RADIO_APP               (DotBot)
 
-extern ipc_shared_data_t ipc_shared_data;
+extern volatile __attribute__((section(".shared_data"))) ipc_shared_data_t ipc_shared_data;
 
 typedef struct {
     uint8_t     notification_buffer[255];
@@ -40,6 +41,8 @@ __attribute__((cmse_nonsecure_entry)) void reload_wdt0(void);
 __attribute__((cmse_nonsecure_entry)) void reload_wdt0(void) {
     NRF_WDT0_S->RR[0] = WDT_RR_RR_Reload << WDT_RR_RR_Pos;
 }
+
+typedef void (*tdma_client_cb_t)(uint8_t *packet, uint8_t length);  ///< Function pointer to the callback function called on packet receive
 
 typedef void (*reset_handler_t)(void) __attribute__((cmse_nonsecure_call));
 
@@ -223,10 +226,9 @@ int main(void) {
 
     tz_configure_ram_non_secure(3, 1);
 
-    NRF_IPC_S->INTENSET                                 = (1 << IPC_CHAN_RADIO_RX | 1 << IPC_CHAN_OTA_START | 1 << IPC_CHAN_OTA_CHUNK | 1 << IPC_CHAN_EXPERIMENT_START);
+    NRF_IPC_S->INTENSET                                 = (1 << IPC_CHAN_OTA_START | 1 << IPC_CHAN_OTA_CHUNK | 1 << IPC_CHAN_EXPERIMENT_START);
     NRF_IPC_S->SEND_CNF[IPC_CHAN_REQ]                   = 1 << IPC_CHAN_REQ;
     NRF_IPC_S->SEND_CNF[IPC_CHAN_LOG_EVENT]             = 1 << IPC_CHAN_LOG_EVENT;
-    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_RADIO_RX]           = 1 << IPC_CHAN_RADIO_RX;
     NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_EXPERIMENT_START]   = 1 << IPC_CHAN_EXPERIMENT_START;
     NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_EXPERIMENT_STOP]    = 1 << IPC_CHAN_EXPERIMENT_STOP;
     NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_OTA_START]          = 1 << IPC_CHAN_OTA_START;
@@ -239,10 +241,7 @@ int main(void) {
     // Start the network core
     release_network_core();
 
-    // Network core must remain on
-    radio_init(RADIO_BLE_2MBit);
-    radio_set_frequency(8);
-    radio_rx();
+    tdma_client_init(RADIO_BLE_2MBit, RADIO_FREQ, RADIO_APP);
 
     // Check reset reason and switch to user image if reset was not triggered by any wdt timeout
     uint32_t resetreas = NRF_RESET_S->RESETREAS;
@@ -295,12 +294,13 @@ int main(void) {
             printf("Erasing done\n");
 
             // Notify erase is done
+            protocol_header_to_buffer(_bootloader_vars.notification_buffer, BROADCAST_ADDRESS, DotBot, PROTOCOL_SWARMIT_PACKET);
             swrmt_notification_t notification = {
                 .device_id = _deviceid(),
                 .type = SWRMT_NOTIFICATION_OTA_START_ACK,
             };
-            radio_disable();
-            radio_tx((uint8_t *)&notification, sizeof(swrmt_notification_t));
+            memcpy(_bootloader_vars.notification_buffer + sizeof(protocol_header_t), &notification, sizeof(swrmt_notification_t));
+            tdma_client_tx(_bootloader_vars.notification_buffer, sizeof(protocol_header_t) + sizeof(swrmt_notification_t));
         }
 
         if (_bootloader_vars.ota_chunk_request) {
@@ -309,18 +309,17 @@ int main(void) {
             // Write chunk to flash
             uint32_t addr = _bootloader_vars.base_addr + ipc_shared_data.ota.chunk_index * SWRMT_OTA_CHUNK_SIZE;
             printf("Writing chunk %d at address %p\n", ipc_shared_data.ota.chunk_index, (uint32_t *)addr);
-            nvmc_write((uint32_t *)addr, ipc_shared_data.ota.chunk, ipc_shared_data.ota.chunk_size);
+            nvmc_write((uint32_t *)addr, (void *)ipc_shared_data.ota.chunk, ipc_shared_data.ota.chunk_size);
 
             // Notify chunk has been written
+            protocol_header_to_buffer(_bootloader_vars.notification_buffer, BROADCAST_ADDRESS, DotBot, PROTOCOL_SWARMIT_PACKET);
             swrmt_notification_t notification = {
                 .device_id = _deviceid(),
                 .type = SWRMT_NOTIFICATION_OTA_CHUNK_ACK,
             };
-
-            memcpy(_bootloader_vars.notification_buffer, &notification, sizeof(swrmt_notification_t));
-            memcpy(_bootloader_vars.notification_buffer + sizeof(swrmt_notification_t), &ipc_shared_data.ota.chunk_index, sizeof(uint32_t));
-            radio_disable();
-            radio_tx(_bootloader_vars.notification_buffer, sizeof(swrmt_notification_t) + sizeof(uint32_t));
+            memcpy(_bootloader_vars.notification_buffer + sizeof(protocol_header_t), &notification, sizeof(swrmt_notification_t));
+            memcpy(_bootloader_vars.notification_buffer + sizeof(protocol_header_t) + sizeof(swrmt_notification_t), (void *)&ipc_shared_data.ota.chunk_index, sizeof(uint32_t));
+            tdma_client_tx(_bootloader_vars.notification_buffer, sizeof(protocol_header_t) + sizeof(swrmt_notification_t) + sizeof(uint32_t));
         }
 
         if (_bootloader_vars.start_experiment) {

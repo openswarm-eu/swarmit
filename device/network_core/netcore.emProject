@@ -68,11 +68,19 @@
       <file file_name="Setup/MemoryMap.xml" />
     </folder>
     <folder Name="Source">
+      <file file_name="Source/device.h" />
       <file file_name="Source/ipc.h" />
       <file file_name="Source/main.c" />
+      <file file_name="Source/protocol.c" />
       <file file_name="Source/protocol.h" />
       <file file_name="Source/radio.c" />
       <file file_name="Source/radio.h" />
+      <file file_name="Source/rng.c" />
+      <file file_name="Source/rng.h" />
+      <file file_name="Source/tdma_client.c" />
+      <file file_name="Source/tdma_client.h" />
+      <file file_name="Source/timer_hf.c" />
+      <file file_name="Source/timer_hf.h" />
     </folder>
     <folder Name="System">
       <file file_name="System/fault_handlers.c" />
