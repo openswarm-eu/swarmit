@@ -22,7 +22,7 @@ authors = [
 dependencies = [
     "click          == 8.1.7",
     "cryptography   == 43.0.1",
-    "pydotbot       == 0.21.2",
+    "pydotbot       == 0.22.0",
     "pyserial       == 3.5",
     "rich           == 13.8.1",
     "structlog      == 24.4.0",
