@@ -19,7 +19,7 @@ from rich.table import Table
 
 from dotbot.logger import LOGGER
 from dotbot.hdlc import hdlc_encode, HDLCHandler, HDLCState
-from dotbot.protocol import PROTOCOL_VERSION
+from dotbot.protocol import PROTOCOL_VERSION, ProtocolHeader
 from dotbot.serial_interface import (
     SerialInterface,
     SerialInterfaceException,
@@ -30,7 +30,7 @@ from dotbot.serial_interface import (
 SERIAL_PORT = get_default_port()
 BAUDRATE = 1000000
 CHUNK_SIZE = 128
-SWARMIT_PREAMBLE = bytes([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07])
+HEADER = ProtocolHeader()
 
 
 class NotificationType(Enum):
@@ -70,6 +70,17 @@ class DataChunk:
     data: bytes
 
 
+def _header():
+    """Return the header for the protocol."""
+    buffer = bytearray()
+    for field in ProtocolHeader().fields:
+        buffer += int(field.value).to_bytes(
+            length=field.length, byteorder="little", signed=field.signed
+        )
+    buffer += int(16).to_bytes(length=1, byteorder="little")
+    return buffer
+
+
 class SwarmitFlash:
     """Class used to flash a firmware."""
 
@@ -87,7 +98,7 @@ class SwarmitFlash:
     def on_byte_received(self, byte):
         self.hdlc_handler.handle_byte(byte)
         if self.hdlc_handler.state == HDLCState.READY:
-            payload = self.hdlc_handler.payload
+            payload = self.hdlc_handler.payload[25:]
             if not payload:
                 return
             deviceid_ack = hex(int.from_bytes(payload[0:8], byteorder="little"))
@@ -104,7 +115,7 @@ class SwarmitFlash:
 
     def _send_start_ota(self, device_id):
         buffer = bytearray()
-        buffer += SWARMIT_PREAMBLE
+        buffer += _header()
         buffer += int(device_id, 16).to_bytes(length=8, byteorder="little")
         buffer += int(RequestType.SWARMIT_REQ_OTA_START.value).to_bytes(
             length=1, byteorder="little"
@@ -178,7 +189,7 @@ class SwarmitFlash:
                 break
             if send is True:
                 buffer = bytearray()
-                buffer += SWARMIT_PREAMBLE
+                buffer += _header()
                 buffer += int(device_id, 16).to_bytes(length=8, byteorder="little")
                 buffer += int(RequestType.SWARMIT_REQ_OTA_CHUNK.value).to_bytes(
                     length=1, byteorder="little"
@@ -224,7 +235,7 @@ class SwarmitStart:
 
     def _send_start(self, device_id):
         buffer = bytearray()
-        buffer += SWARMIT_PREAMBLE
+        buffer += _header()
         buffer += int(device_id, 16).to_bytes(length=8, byteorder="little")
         buffer += int(RequestType.SWARMIT_REQ_EXPERIMENT_START.value).to_bytes(
             length=1, byteorder="little"
@@ -253,7 +264,7 @@ class SwarmitStop:
 
     def _send_stop(self, device_id):
         buffer = bytearray()
-        buffer += SWARMIT_PREAMBLE
+        buffer += _header()
         buffer += int(device_id, 16).to_bytes(length=8, byteorder="little")
         buffer += int(RequestType.SWARMIT_REQ_EXPERIMENT_STOP.value).to_bytes(
             length=1, byteorder="little"
@@ -287,7 +298,7 @@ class SwarmitMonitor:
             return
         self.hdlc_handler.handle_byte(byte)
         if self.hdlc_handler.state == HDLCState.READY:
-            payload = self.hdlc_handler.payload
+            payload = self.hdlc_handler.payload[25:]
             if not payload:
                 return
             deviceid = int.from_bytes(payload[0:8], byteorder="little")
@@ -320,22 +331,22 @@ class SwarmitStatus:
     def __init__(self, port, baudrate):
         self.logger = LOGGER.bind(context=__name__)
         self.hdlc_handler = HDLCHandler()
-        self.serial = SerialInterface(port, baudrate, self.on_byte_received)
         self.last_deviceid_notification = None
-        # Just write a single byte to fake a DotBot gateway handshake
-        self.serial.write(int(PROTOCOL_VERSION).to_bytes(length=1))
         self.status_data = {}
         self.resp_ids = []
         self.table = Table()
         self.table.add_column("Device ID", style="magenta", no_wrap=True)
         self.table.add_column("Status", style="green")
+        self.serial = SerialInterface(port, baudrate, self.on_byte_received)
+        # Just write a single byte to fake a DotBot gateway handshake
+        self.serial.write(int(PROTOCOL_VERSION).to_bytes(length=1))
 
     def on_byte_received(self, byte):
         if self.hdlc_handler is None:
             return
         self.hdlc_handler.handle_byte(byte)
         if self.hdlc_handler.state == HDLCState.READY:
-            payload = self.hdlc_handler.payload
+            payload = self.hdlc_handler.payload[25:]
             if not payload:
                 return
             deviceid_resp = hex(int.from_bytes(payload[0:8], byteorder="little"))
@@ -352,14 +363,14 @@ class SwarmitStatus:
 
     def status(self, display=True):
         buffer = bytearray()
-        buffer += SWARMIT_PREAMBLE
+        buffer += _header()
         buffer += int("0", 16).to_bytes(length=8, byteorder="little")
         buffer += int(RequestType.SWARMIT_REQ_EXPERIMENT_STATUS.value).to_bytes(
             length=1, byteorder="little"
         )
         self.serial.write(hdlc_encode(buffer))
         timeout = 0  # ms
-        while timeout < 200:
+        while timeout < 2000:
             timeout += 1
             time.sleep(0.0001)
         if self.status_data and display is True:
