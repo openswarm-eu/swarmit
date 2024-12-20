@@ -48,7 +48,7 @@ __attribute__((cmse_nonsecure_entry)) void reload_wdt0(void) {
 
 __attribute__((cmse_nonsecure_entry)) void send_data(const uint8_t *packet, uint8_t length) {
     protocol_header_to_buffer(_bootloader_vars.tx_data_buffer, BROADCAST_ADDRESS, DotBot, PROTOCOL_SWARMIT_PACKET);
-     memcpy(_bootloader_vars.tx_data_buffer + sizeof(protocol_header_t), &packet, length);
+    memcpy(_bootloader_vars.tx_data_buffer + sizeof(protocol_header_t), &packet, length);
     tdma_client_tx(_bootloader_vars.tx_data_buffer, sizeof(protocol_header_t) + length);
 }
 
