@@ -18,6 +18,7 @@
 #include "ipc.h"
 #include "nvmc.h"
 #include "protocol.h"
+#include "tdma_client.h"
 #include "tz.h"
 
 #define SWARMIT_BASE_ADDRESS    (0x00004000);
@@ -26,8 +27,9 @@
 
 extern volatile __attribute__((section(".shared_data"))) ipc_shared_data_t ipc_shared_data;
 
-typedef struct {
+typedef struct __attribute__((aligned(4))) {
     uint8_t     notification_buffer[255];
+    uint8_t     tx_data_buffer[255];
     uint32_t    base_addr;
     bool        ota_start_request;
     bool        ota_chunk_request;
@@ -36,13 +38,28 @@ typedef struct {
 
 static bootloader_app_data_t _bootloader_vars = { 0 };
 
+typedef void (*ipc_isr_cb_t)(const uint8_t *, size_t) __attribute__((cmse_nonsecure_call));
+
 __attribute__((cmse_nonsecure_entry)) void reload_wdt0(void);
+__attribute__((cmse_nonsecure_entry)) void send_data(const uint8_t *packet, uint8_t length);
+__attribute__((cmse_nonsecure_entry)) void ipc_isr(ipc_isr_cb_t cb);
 
 __attribute__((cmse_nonsecure_entry)) void reload_wdt0(void) {
     NRF_WDT0_S->RR[0] = WDT_RR_RR_Reload << WDT_RR_RR_Pos;
 }
 
-typedef void (*tdma_client_cb_t)(uint8_t *packet, uint8_t length);  ///< Function pointer to the callback function called on packet receive
+__attribute__((cmse_nonsecure_entry)) void send_data(const uint8_t *packet, uint8_t length) {
+    protocol_header_to_buffer(_bootloader_vars.tx_data_buffer, BROADCAST_ADDRESS, DotBot, PROTOCOL_SWARMIT_PACKET);
+    memcpy(_bootloader_vars.tx_data_buffer + sizeof(protocol_header_t), &packet, length);
+    tdma_client_tx(_bootloader_vars.tx_data_buffer, sizeof(protocol_header_t) + length);
+}
+
+__attribute__((cmse_nonsecure_entry)) void ipc_isr(ipc_isr_cb_t cb) {
+    if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_RADIO_RX]) {
+        NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_RADIO_RX] = 0;
+        cb((const uint8_t *)ipc_shared_data.data_pdu.buffer, ipc_shared_data.data_pdu.length);
+    }
+}
 
 typedef void (*reset_handler_t)(void) __attribute__((cmse_nonsecure_call));
 
@@ -207,6 +224,30 @@ int main(void) {
 
     setup_watchdog1();
 
+    // First flash region (16kiB) is secure and contains the bootloader
+    tz_configure_flash_secure(0, 1);
+    // Configure non secure flash address space
+    tz_configure_flash_non_secure(1, 63);
+
+    // Management code
+    // Application mutex must be non secure because it's shared with the network which is itself non secure
+    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_MUTEX);
+    // Third region in RAM is used for IPC shared data structure
+    tz_configure_ram_non_secure(3, 1);
+
+    // Configure IPC interrupts and channels used to interact with the network core.
+    NRF_IPC_S->INTENSET                                 = (1 << IPC_CHAN_RADIO_RX | 1 << IPC_CHAN_OTA_START | 1 << IPC_CHAN_OTA_CHUNK | 1 << IPC_CHAN_EXPERIMENT_START);
+    NRF_IPC_S->SEND_CNF[IPC_CHAN_REQ]                   = 1 << IPC_CHAN_REQ;
+    NRF_IPC_S->SEND_CNF[IPC_CHAN_LOG_EVENT]             = 1 << IPC_CHAN_LOG_EVENT;
+    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_RADIO_RX]           = 1 << IPC_CHAN_RADIO_RX;
+    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_EXPERIMENT_START]   = 1 << IPC_CHAN_EXPERIMENT_START;
+    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_EXPERIMENT_STOP]    = 1 << IPC_CHAN_EXPERIMENT_STOP;
+    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_OTA_START]          = 1 << IPC_CHAN_OTA_START;
+    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_OTA_CHUNK]          = 1 << IPC_CHAN_OTA_CHUNK;
+    NVIC_EnableIRQ(IPC_IRQn);
+    NVIC_ClearPendingIRQ(IPC_IRQn);
+    NVIC_SetPriority(IPC_IRQn, IPC_IRQ_PRIORITY);
+
     // PPI connection: IPC_RECEIVE -> WDT_START
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_DPPIC);
     NRF_SPU_S->DPPI[0].PERM &= ~(SPU_DPPI_PERM_CHANNEL0_Msk);
@@ -215,28 +256,6 @@ int main(void) {
     NRF_WDT1_S->SUBSCRIBE_START = WDT_SUBSCRIBE_START_EN_Enabled << WDT_SUBSCRIBE_START_EN_Pos;
     NRF_DPPIC_NS->CHENSET = (DPPIC_CHENSET_CH0_Enabled << DPPIC_CHENSET_CH0_Pos);
     NRF_DPPIC_S->CHENSET = (DPPIC_CHENSET_CH0_Enabled << DPPIC_CHENSET_CH0_Pos);
-
-    // First flash region (16kiB) is secure and contains the bootloader
-    tz_configure_flash_secure(0, 1);
-    // Configure non secure flash address space
-    tz_configure_flash_non_secure(1, 63);
-
-    // Management code
-    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_MUTEX);
-
-    tz_configure_ram_non_secure(3, 1);
-
-    NRF_IPC_S->INTENSET                                 = (1 << IPC_CHAN_OTA_START | 1 << IPC_CHAN_OTA_CHUNK | 1 << IPC_CHAN_EXPERIMENT_START);
-    NRF_IPC_S->SEND_CNF[IPC_CHAN_REQ]                   = 1 << IPC_CHAN_REQ;
-    NRF_IPC_S->SEND_CNF[IPC_CHAN_LOG_EVENT]             = 1 << IPC_CHAN_LOG_EVENT;
-    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_EXPERIMENT_START]   = 1 << IPC_CHAN_EXPERIMENT_START;
-    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_EXPERIMENT_STOP]    = 1 << IPC_CHAN_EXPERIMENT_STOP;
-    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_OTA_START]          = 1 << IPC_CHAN_OTA_START;
-    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_OTA_CHUNK]          = 1 << IPC_CHAN_OTA_CHUNK;
-
-    NVIC_EnableIRQ(IPC_IRQn);
-    NVIC_ClearPendingIRQ(IPC_IRQn);
-    NVIC_SetPriority(IPC_IRQn, IPC_IRQ_PRIORITY);
 
     // Start the network core
     release_network_core();
@@ -253,6 +272,7 @@ int main(void) {
         // Initialize watchdog and non secure access
         setup_ns_user();
         setup_watchdog0();
+        NVIC_SetTargetState(IPC_IRQn);
 
         // Experiment is running
         ipc_shared_data.status = SWRMT_EXPERIMENT_RUNNING;
@@ -295,7 +315,7 @@ int main(void) {
 
             // Notify erase is done
             protocol_header_to_buffer(_bootloader_vars.notification_buffer, BROADCAST_ADDRESS, DotBot, PROTOCOL_SWARMIT_PACKET);
-            swrmt_notification_t notification = {
+            __attribute__((aligned(4))) swrmt_notification_t notification = {
                 .device_id = _deviceid(),
                 .type = SWRMT_NOTIFICATION_OTA_START_ACK,
             };
@@ -313,7 +333,7 @@ int main(void) {
 
             // Notify chunk has been written
             protocol_header_to_buffer(_bootloader_vars.notification_buffer, BROADCAST_ADDRESS, DotBot, PROTOCOL_SWARMIT_PACKET);
-            swrmt_notification_t notification = {
+            __attribute__((aligned(4))) swrmt_notification_t notification = {
                 .device_id = _deviceid(),
                 .type = SWRMT_NOTIFICATION_OTA_CHUNK_ACK,
             };
