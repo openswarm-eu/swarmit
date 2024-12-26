@@ -38,9 +38,11 @@ typedef struct __attribute__((aligned(4))) {
 
 static bootloader_app_data_t _bootloader_vars = { 0 };
 
+typedef void (*ipc_isr_cb_t)(const uint8_t *, size_t) __attribute__((cmse_nonsecure_call));
+
 __attribute__((cmse_nonsecure_entry)) void reload_wdt0(void);
 __attribute__((cmse_nonsecure_entry)) void send_data(const uint8_t *packet, uint8_t length);
-__attribute__((cmse_nonsecure_entry)) void rx_data(uint8_t *packet, size_t *length);
+__attribute__((cmse_nonsecure_entry)) void ipc_isr(ipc_isr_cb_t cb);
 
 __attribute__((cmse_nonsecure_entry)) void reload_wdt0(void) {
     NRF_WDT0_S->RR[0] = WDT_RR_RR_Reload << WDT_RR_RR_Pos;
@@ -52,9 +54,11 @@ __attribute__((cmse_nonsecure_entry)) void send_data(const uint8_t *packet, uint
     tdma_client_tx(_bootloader_vars.tx_data_buffer, sizeof(protocol_header_t) + length);
 }
 
-__attribute__((cmse_nonsecure_entry)) void rx_data(uint8_t *packet, size_t *length) {
-    memcpy(packet, (const uint8_t *)ipc_shared_data.data_pdu.buffer, ipc_shared_data.data_pdu.length);
-    *length = ipc_shared_data.data_pdu.length;
+__attribute__((cmse_nonsecure_entry)) void ipc_isr(ipc_isr_cb_t cb) {
+    if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_RADIO_RX]) {
+        NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_RADIO_RX] = 0;
+        cb((const uint8_t *)ipc_shared_data.data_pdu.buffer, ipc_shared_data.data_pdu.length);
+    }
 }
 
 typedef void (*reset_handler_t)(void) __attribute__((cmse_nonsecure_call));
@@ -231,16 +235,15 @@ int main(void) {
     // Third region in RAM is used for IPC shared data structure
     tz_configure_ram_non_secure(3, 1);
 
-    // Switching IPC to non secure to allow communication with the non secure image
-    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_IPC);
-    NRF_IPC_NS->INTENSET                                = (1 << IPC_CHAN_RADIO_RX | 1 << IPC_CHAN_OTA_START | 1 << IPC_CHAN_OTA_CHUNK | 1 << IPC_CHAN_EXPERIMENT_START);
-    NRF_IPC_NS->SEND_CNF[IPC_CHAN_REQ]                  = 1 << IPC_CHAN_REQ;
-    NRF_IPC_NS->SEND_CNF[IPC_CHAN_LOG_EVENT]            = 1 << IPC_CHAN_LOG_EVENT;
-    NRF_IPC_NS->RECEIVE_CNF[IPC_CHAN_RADIO_RX]          = 1 << IPC_CHAN_RADIO_RX;
-    NRF_IPC_NS->RECEIVE_CNF[IPC_CHAN_EXPERIMENT_START]  = 1 << IPC_CHAN_EXPERIMENT_START;
-    NRF_IPC_NS->RECEIVE_CNF[IPC_CHAN_EXPERIMENT_STOP]   = 1 << IPC_CHAN_EXPERIMENT_STOP;
-    NRF_IPC_NS->RECEIVE_CNF[IPC_CHAN_OTA_START]         = 1 << IPC_CHAN_OTA_START;
-    NRF_IPC_NS->RECEIVE_CNF[IPC_CHAN_OTA_CHUNK]         = 1 << IPC_CHAN_OTA_CHUNK;
+    // Configure IPC interrupts and channels used to interact with the network core.
+    NRF_IPC_S->INTENSET                                 = (1 << IPC_CHAN_RADIO_RX | 1 << IPC_CHAN_OTA_START | 1 << IPC_CHAN_OTA_CHUNK | 1 << IPC_CHAN_EXPERIMENT_START);
+    NRF_IPC_S->SEND_CNF[IPC_CHAN_REQ]                   = 1 << IPC_CHAN_REQ;
+    NRF_IPC_S->SEND_CNF[IPC_CHAN_LOG_EVENT]             = 1 << IPC_CHAN_LOG_EVENT;
+    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_RADIO_RX]           = 1 << IPC_CHAN_RADIO_RX;
+    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_EXPERIMENT_START]   = 1 << IPC_CHAN_EXPERIMENT_START;
+    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_EXPERIMENT_STOP]    = 1 << IPC_CHAN_EXPERIMENT_STOP;
+    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_OTA_START]          = 1 << IPC_CHAN_OTA_START;
+    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_OTA_CHUNK]          = 1 << IPC_CHAN_OTA_CHUNK;
     NVIC_EnableIRQ(IPC_IRQn);
     NVIC_ClearPendingIRQ(IPC_IRQn);
     NVIC_SetPriority(IPC_IRQn, IPC_IRQ_PRIORITY);
@@ -249,7 +252,7 @@ int main(void) {
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_DPPIC);
     NRF_SPU_S->DPPI[0].PERM &= ~(SPU_DPPI_PERM_CHANNEL0_Msk);
     NRF_SPU_S->DPPI[0].LOCK |= SPU_DPPI_LOCK_LOCK_Locked << SPU_DPPI_LOCK_LOCK_Pos;
-    NRF_IPC_NS->PUBLISH_RECEIVE[IPC_CHAN_EXPERIMENT_STOP] = IPC_PUBLISH_RECEIVE_EN_Enabled << IPC_PUBLISH_RECEIVE_EN_Pos;
+    NRF_IPC_S->PUBLISH_RECEIVE[IPC_CHAN_EXPERIMENT_STOP] = IPC_PUBLISH_RECEIVE_EN_Enabled << IPC_PUBLISH_RECEIVE_EN_Pos;
     NRF_WDT1_S->SUBSCRIBE_START = WDT_SUBSCRIBE_START_EN_Enabled << WDT_SUBSCRIBE_START_EN_Pos;
     NRF_DPPIC_NS->CHENSET = (DPPIC_CHENSET_CH0_Enabled << DPPIC_CHENSET_CH0_Pos);
     NRF_DPPIC_S->CHENSET = (DPPIC_CHENSET_CH0_Enabled << DPPIC_CHENSET_CH0_Pos);
@@ -349,18 +352,18 @@ int main(void) {
 
 void IPC_IRQHandler(void) {
 
-    if (NRF_IPC_NS->EVENTS_RECEIVE[IPC_CHAN_OTA_START]) {
-        NRF_IPC_NS->EVENTS_RECEIVE[IPC_CHAN_OTA_START] = 0;
+    if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_OTA_START]) {
+        NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_OTA_START] = 0;
         _bootloader_vars.ota_start_request = true;
     }
 
-    if (NRF_IPC_NS->EVENTS_RECEIVE[IPC_CHAN_OTA_CHUNK]) {
-        NRF_IPC_NS->EVENTS_RECEIVE[IPC_CHAN_OTA_CHUNK] = 0;
+    if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_OTA_CHUNK]) {
+        NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_OTA_CHUNK] = 0;
         _bootloader_vars.ota_chunk_request = true;
     }
 
-    if (NRF_IPC_NS->EVENTS_RECEIVE[IPC_CHAN_EXPERIMENT_START]) {
-        NRF_IPC_NS->EVENTS_RECEIVE[IPC_CHAN_EXPERIMENT_START] = 0;
+    if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_EXPERIMENT_START]) {
+        NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_EXPERIMENT_START] = 0;
         _bootloader_vars.start_experiment = true;
     }
 }

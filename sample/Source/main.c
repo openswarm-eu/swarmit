@@ -17,18 +17,17 @@
 #define IPC_CHAN_RADIO_RX   (1U)
 #define GPIO_P0_PIN (28)  // LED0 on nRF5340DK
 
-typedef struct {
-    uint8_t buffer[UINT8_MAX];
-    size_t length;
-} rx_data_t;
-
-static rx_data_t _rx_data = { 0 };
+typedef void (*ipc_isr_cb_t)(const uint8_t *, size_t);
 
 void reload_wdt0(void);
 void send_data(const uint8_t *packet, uint8_t length);
-void rx_data(uint8_t *packet, size_t *length);
+void ipc_isr(ipc_isr_cb_t cb);
 void log_data(uint8_t *data, size_t length);
 static bool _timer_running = false;
+
+static void _rx_data_callback(const uint8_t *data, size_t length) {
+    printf("Message received (%dB): %s\n", length - 34, &data[34]);
+}
 
 static void delay_ms(uint32_t ms) {
     NRF_TIMER0_NS->TASKS_CAPTURE[0] = 1;
@@ -71,10 +70,5 @@ void TIMER0_IRQHandler(void) {
 }
 
 void IPC_IRQHandler(void) {
-    if (NRF_IPC_NS->EVENTS_RECEIVE[IPC_CHAN_RADIO_RX]) {
-        NRF_IPC_NS->EVENTS_RECEIVE[IPC_CHAN_RADIO_RX] = 0;
-        rx_data(_rx_data.buffer, &_rx_data.length);
-        printf("Message received (%dB): %s\n", _rx_data.length - 34, &_rx_data.buffer[34]);
-        memset(_rx_data.buffer, 0, UINT8_MAX);
-    }
+    ipc_isr(_rx_data_callback);
 }
