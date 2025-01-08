@@ -8,7 +8,6 @@
  * @copyright Inria, 2023
  */
 
-#include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
 #include <nrf.h>

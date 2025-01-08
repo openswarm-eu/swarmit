@@ -10,7 +10,6 @@
  */
 #include <nrf.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
 
@@ -20,7 +19,6 @@
 #include "timer_hf.h"
 #include "protocol.h"
 #include "device.h"
-#include "ipc.h"
 
 //=========================== defines ==========================================
 

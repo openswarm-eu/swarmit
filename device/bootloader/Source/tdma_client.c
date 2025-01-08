@@ -12,13 +12,11 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "ipc.h"
 #include "radio.h"
 #include "tz.h"
-#include "device.h"
 #include "tdma_client.h"
 
 //=========================== variables ========================================

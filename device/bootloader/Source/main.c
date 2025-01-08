@@ -9,17 +9,14 @@
 
 #include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include <arm_cmse.h>
 #include <nrf.h>
 
-#include "device.h"
 #include "ipc.h"
 #include "nvmc.h"
 #include "protocol.h"
-#include "rng.h"
 #include "tdma_client.h"
 #include "tz.h"
 
@@ -31,7 +28,6 @@ extern volatile __attribute__((section(".shared_data"))) ipc_shared_data_t ipc_s
 
 typedef struct __attribute__((aligned(4))) {
     uint8_t     notification_buffer[255];
-    uint8_t     tx_data_buffer[255];
     uint32_t    base_addr;
     bool        ota_start_request;
     bool        ota_chunk_request;
@@ -39,49 +35,6 @@ typedef struct __attribute__((aligned(4))) {
 } bootloader_app_data_t;
 
 static bootloader_app_data_t _bootloader_vars = { 0 };
-
-typedef void (*ipc_isr_cb_t)(const uint8_t *, size_t) __attribute__((cmse_nonsecure_call));
-
-__attribute__((cmse_nonsecure_entry)) void swarmit_reload_wdt0(void);
-__attribute__((cmse_nonsecure_entry)) void swarmit_send_packet(const uint8_t *packet, uint8_t length);
-__attribute__((cmse_nonsecure_entry)) void swarmit_send_raw_data(const uint8_t *packet, uint8_t length);
-__attribute__((cmse_nonsecure_entry)) void swarmit_ipc_isr(ipc_isr_cb_t cb);
-__attribute__((cmse_nonsecure_entry)) void swarmit_init_rng(void);
-__attribute__((cmse_nonsecure_entry)) void swarmit_read_rng(uint8_t *value);
-__attribute__((cmse_nonsecure_entry)) uint64_t swarmit_read_device_id(void);
-
-__attribute__((cmse_nonsecure_entry)) void swarmit_reload_wdt0(void) {
-    NRF_WDT0_S->RR[0] = WDT_RR_RR_Reload << WDT_RR_RR_Pos;
-}
-
-__attribute__((cmse_nonsecure_entry)) void swarmit_send_packet(const uint8_t *packet, uint8_t length) {
-    protocol_header_to_buffer(_bootloader_vars.tx_data_buffer, BROADCAST_ADDRESS, DotBot, PROTOCOL_SWARMIT_PACKET);
-    memcpy(_bootloader_vars.tx_data_buffer + sizeof(protocol_header_t), &packet, length);
-    tdma_client_tx(_bootloader_vars.tx_data_buffer, sizeof(protocol_header_t) + length);
-}
-
-__attribute__((cmse_nonsecure_entry)) void swarmit_send_raw_data(const uint8_t *packet, uint8_t length) {
-    tdma_client_tx(packet, length);
-}
-
-__attribute__((cmse_nonsecure_entry)) void swarmit_ipc_isr(ipc_isr_cb_t cb) {
-    if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_RADIO_RX]) {
-        NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_RADIO_RX] = 0;
-        cb((const uint8_t *)ipc_shared_data.data_pdu.buffer, ipc_shared_data.data_pdu.length);
-    }
-}
-
-__attribute__((cmse_nonsecure_entry)) void swarmit_init_rng(void) {
-    rng_init();
-}
-
-__attribute__((cmse_nonsecure_entry)) void swarmit_read_rng(uint8_t *value) {
-    rng_read(value);
-}
-
-__attribute__((cmse_nonsecure_entry)) uint64_t swarmit_read_device_id(void) {
-    return db_device_id();
-}
 
 typedef void (*reset_handler_t)(void) __attribute__((cmse_nonsecure_call));
 

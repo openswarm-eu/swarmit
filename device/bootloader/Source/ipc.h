@@ -16,14 +16,10 @@
 #include <nrf.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
 #include "protocol.h"
 #include "tdma_client.h"
 
 #define IPC_IRQ_PRIORITY (1)
-
-__attribute__((cmse_nonsecure_entry)) void swarmit_log_data(uint8_t *data, size_t length);
 
 typedef enum {
     IPC_REQ_NONE,        ///< Sorry, but nothing

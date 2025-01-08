@@ -9,11 +9,9 @@
 
 #include <stdlib.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <nrf.h>
 
 #include "clock.h"
-#include "fault_handlers.h"
 
 extern __NO_RETURN int main(void);
 

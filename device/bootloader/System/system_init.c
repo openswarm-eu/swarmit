@@ -25,11 +25,11 @@ NOTICE: This file has been modified by Nordic Semiconductor ASA.
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "nrf.h"
-#include "nrf_peripherals.h"
-#include "nrf53_erratas.h"
-#include "system_nrf5340_application.h"
-#include "system_nrf53_approtect.h"
+#include <nrf.h>
+#include <nrf_peripherals.h>
+#include <nrf53_erratas.h>
+#include <system_nrf5340_application.h>
+#include <system_nrf53_approtect.h>
 
 /*lint ++flb "Enter library region" */
 

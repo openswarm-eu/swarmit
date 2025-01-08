@@ -73,6 +73,8 @@
       <file file_name="Setup/MemoryMap.xml" />
     </folder>
     <folder Name="Source">
+      <file file_name="Source/cmse_implib.c" />
+      <file file_name="Source/cmse_implib.h" />
       <file file_name="Source/device.h" />
       <file file_name="Source/ipc.c" />
       <file file_name="Source/ipc.h" />

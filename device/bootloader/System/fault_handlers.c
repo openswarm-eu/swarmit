@@ -9,7 +9,6 @@
  *
  */
 
-#include <stdio.h>
 #include <nrf.h>
 #include "fault_handlers.h"
 
