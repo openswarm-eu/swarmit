@@ -14,15 +14,14 @@
 
 #include <nrf.h>
 
-#define IPC_CHAN_RADIO_RX   (1U)
 #define GPIO_P0_PIN (28)  // LED0 on nRF5340DK
 
 typedef void (*ipc_isr_cb_t)(const uint8_t *, size_t);
 
-void reload_wdt0(void);
-void send_data(const uint8_t *packet, uint8_t length);
-void ipc_isr(ipc_isr_cb_t cb);
-void log_data(uint8_t *data, size_t length);
+void swarmit_reload_wdt0(void);
+void swarmit_send_packet(const uint8_t *packet, uint8_t length);
+void swarmit_ipc_isr(ipc_isr_cb_t cb);
+void swarmit_log_data(uint8_t *data, size_t length);
 static bool _timer_running = false;
 
 static void _rx_data_callback(const uint8_t *data, size_t length) {
@@ -51,9 +50,9 @@ int main(void) {
 
     while (1) {
         delay_ms(500);
-        reload_wdt0();
-        send_data((uint8_t *)"Hello", 5);
-        log_data((uint8_t *)"Logging", 7);
+        swarmit_reload_wdt0();
+        swarmit_send_packet((uint8_t *)"Hello", 5);
+        swarmit_log_data((uint8_t *)"Logging", 7);
         // Crash on purpose
         //uint32_t *addr = 0x0;
         //*addr = 0xdead;
@@ -70,5 +69,5 @@ void TIMER0_IRQHandler(void) {
 }
 
 void IPC_IRQHandler(void) {
-    ipc_isr(_rx_data_callback);
+    swarmit_ipc_isr(_rx_data_callback);
 }

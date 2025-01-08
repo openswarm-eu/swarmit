@@ -15,13 +15,11 @@
 // Include BSP headers
 #include "ipc.h"
 #include "protocol.h"
-#include "radio.h"
+#include "rng.h"
 #include "tdma_client.h"
 #include "timer_hf.h"
 
 #define SWRMT_USER_IMAGE_BASE_ADDRESS       (0x00004000)
-#define GPIO_CHANNELS_COUNT                 (5U)
-#define RADIO_TX_DELAY_MS                   (10)
 #define NETCORE_MAIN_TIMER                  (0)
 
 //=========================== variables =========================================
@@ -190,6 +188,12 @@ int main(void) {
                     break;
                 case IPC_TDMA_CLIENT_STATUS_REQ:
                     ipc_shared_data.tdma_client.registration_state = tdma_client_get_status();
+                    break;
+                case IPC_RNG_INIT_REQ:
+                    rng_init();
+                    break;
+                case IPC_RNG_READ_REQ:
+                    rng_read((uint8_t *)&ipc_shared_data.rng.value);
                     break;
                 default:
                     break;

@@ -44,7 +44,7 @@ void release_network_core(void) {
     while (!ipc_shared_data.net_ready) {}
 }
 
-__attribute__((cmse_nonsecure_entry)) void log_data(uint8_t *data, size_t length) {
+__attribute__((cmse_nonsecure_entry)) void swarmit_log_data(uint8_t *data, size_t length) {
     if (length > INT8_MAX) {
         // Ensure length fits in the log data buffer in shared RAM
         return;

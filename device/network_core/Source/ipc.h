@@ -33,6 +33,8 @@ typedef enum {
     IPC_TDMA_CLIENT_FLUSH_REQ,       ///< Request for flushing the TDMA client message buffer
     IPC_TDMA_CLIENT_EMPTY_REQ,       ///< Request for erasing the TDMA client message buffer
     IPC_TDMA_CLIENT_STATUS_REQ,      ///< Request for reading the TDMA client driver status
+    IPC_RNG_INIT_REQ,                ///< Request for rng init
+    IPC_RNG_READ_REQ,                ///< Request for rng read
 } ipc_req_t;
 
 typedef enum {
@@ -44,6 +46,10 @@ typedef enum {
     IPC_CHAN_OTA_START          = 5,    ///< Channel used for starting an OTA process
     IPC_CHAN_OTA_CHUNK          = 6,    ///< Channel used for writing a non secure image chunk
 } ipc_channels_t;
+
+typedef struct {
+    uint8_t value;  ///< Byte containing the random value read
+} ipc_rng_data_t;
 
 typedef struct __attribute__((packed)) {
     uint8_t length;             ///< Length of the pdu in bytes
@@ -79,6 +85,7 @@ typedef struct __attribute__((packed)) {
     ipc_req_t              req;         ///< IPC network request
     uint8_t                status;      ///< Experiment status
     ipc_log_data_t         log;         ///< Log data
+    ipc_rng_data_t         rng;         ///< Rng shared data
     ipc_ota_data_t         ota;         ///< OTA data
     ipc_tdma_client_data_t tdma_client; ///< TDMA client drv shared data
     ipc_radio_pdu_t        data_pdu;    ///< User data pdu

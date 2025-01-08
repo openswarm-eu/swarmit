@@ -23,7 +23,7 @@
 
 #define IPC_IRQ_PRIORITY (1)
 
-__attribute__((cmse_nonsecure_entry)) void log_data(uint8_t *data, size_t length);
+__attribute__((cmse_nonsecure_entry)) void swarmit_log_data(uint8_t *data, size_t length);
 
 typedef enum {
     IPC_REQ_NONE,        ///< Sorry, but nothing
@@ -34,6 +34,8 @@ typedef enum {
     IPC_TDMA_CLIENT_FLUSH_REQ,       ///< Request for flushing the TDMA client message buffer
     IPC_TDMA_CLIENT_EMPTY_REQ,       ///< Request for erasing the TDMA client message buffer
     IPC_TDMA_CLIENT_STATUS_REQ,      ///< Request for reading the TDMA client driver status
+    IPC_RNG_INIT_REQ,                ///< Request for rng init
+    IPC_RNG_READ_REQ,                ///< Request for rng read
 } ipc_req_t;
 
 typedef enum {
@@ -84,6 +86,7 @@ typedef struct __attribute__((packed)) {
     ipc_req_t              req;         ///< IPC network request
     uint8_t                status;      ///< Experiment status
     ipc_log_data_t         log;         ///< Log data
+    ipc_rng_data_t         rng;         ///< Rng shared data
     ipc_ota_data_t         ota;         ///< OTA data
     ipc_tdma_client_data_t tdma_client; ///< TDMA client drv shared data
     ipc_radio_pdu_t        data_pdu;    ///< User data pdu
