@@ -431,6 +431,10 @@ static void tdma_client_callback(uint8_t *packet, uint8_t length) {
             }
         } break;
 
+        case PROTOCOL_TDMA_KEEP_ALIVE:
+            // ignore
+            break;
+
         // This is not a TDMA packet, send to the user callback
         default:
         {
