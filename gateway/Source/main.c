@@ -21,7 +21,6 @@
 #define RADIO_QUEUE_SIZE (8U)                             ///< Size of the radio queue (must by a power of 2)
 #define RADIO_FREQ       (8U)                             //< Set the frequency to 2408 MHz
 #define UART_QUEUE_SIZE  ((BUFFER_MAX_BYTES + 1) * 2)  ///< Size of the UART queue size (must by a power of 2)
-#define RADIO_APP           (DotBot)                         // DotBot Radio App
 
 typedef struct {
     uint8_t length;                       ///< Length of the radio packet
@@ -99,7 +98,7 @@ int main(void) {
     db_gpio_set(&db_led3);
 
     // Configure Radio as transmitter
-    tdma_server_init(&_radio_callback, DOTBOT_GW_RADIO_MODE, RADIO_FREQ, RADIO_APP);
+    tdma_server_init(&_radio_callback, DOTBOT_GW_RADIO_MODE, RADIO_FREQ);
 
     // Initialize the gateway context
     _gw_vars.buttons             = 0x0000;
