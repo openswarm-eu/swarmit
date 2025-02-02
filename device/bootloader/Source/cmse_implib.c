@@ -18,10 +18,12 @@ __attribute__((cmse_nonsecure_entry)) void swarmit_reload_wdt0(void) {
     NRF_WDT0_S->RR[0] = WDT_RR_RR_Reload << WDT_RR_RR_Pos;
 }
 
-__attribute__((cmse_nonsecure_entry)) void swarmit_send_packet(const uint8_t *packet, uint8_t length) {
-    protocol_header_to_buffer(_tx_data_buffer, BROADCAST_ADDRESS, DotBot, PROTOCOL_SWARMIT_PACKET);
-    memcpy(_tx_data_buffer + sizeof(protocol_header_t), &packet, length);
-    tdma_client_tx(_tx_data_buffer, sizeof(protocol_header_t) + length);
+__attribute__((cmse_nonsecure_entry)) void swarmit_send_data_packet(const uint8_t *packet, uint8_t length) {
+    size_t frame_length = protocol_header_to_buffer(_tx_data_buffer, GATEWAY_ADDRESS);
+    _tx_data_buffer[frame_length++] = PACKET_DATA;
+    memcpy(_tx_data_buffer + frame_length, &packet, length);
+    frame_length += length;
+    tdma_client_tx(_tx_data_buffer, frame_length);
 }
 
 __attribute__((cmse_nonsecure_entry)) void swarmit_send_raw_data(const uint8_t *packet, uint8_t length) {

@@ -19,7 +19,7 @@
 typedef void (*ipc_isr_cb_t)(const uint8_t *, size_t) __attribute__((cmse_nonsecure_call));
 
 __attribute__((cmse_nonsecure_entry)) void swarmit_reload_wdt0(void);
-__attribute__((cmse_nonsecure_entry)) void swarmit_send_packet(const uint8_t *packet, uint8_t length);
+__attribute__((cmse_nonsecure_entry)) void swarmit_send_data_packet(const uint8_t *packet, uint8_t length);
 __attribute__((cmse_nonsecure_entry)) void swarmit_send_raw_data(const uint8_t *packet, uint8_t length);
 __attribute__((cmse_nonsecure_entry)) void swarmit_ipc_isr(ipc_isr_cb_t cb);
 __attribute__((cmse_nonsecure_entry)) void swarmit_init_rng(void);

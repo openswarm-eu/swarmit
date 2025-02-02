@@ -22,7 +22,6 @@
 
 #define SWARMIT_BASE_ADDRESS    (0x00004000);
 #define RADIO_FREQ              (8U)
-#define RADIO_APP               (DotBot)
 
 extern volatile __attribute__((section(".shared_data"))) ipc_shared_data_t ipc_shared_data;
 
@@ -235,7 +234,7 @@ int main(void) {
     // Start the network core
     release_network_core();
 
-    tdma_client_init(RADIO_BLE_2MBit, RADIO_FREQ, RADIO_APP);
+    tdma_client_init(RADIO_BLE_2MBit, RADIO_FREQ);
 
     // Check reset reason and switch to user image if reset was not triggered by any wdt timeout
     uint32_t resetreas = NRF_RESET_S->RESETREAS;
@@ -289,13 +288,12 @@ int main(void) {
             printf("Erasing done\n");
 
             // Notify erase is done
-            protocol_header_to_buffer(_bootloader_vars.notification_buffer, BROADCAST_ADDRESS, DotBot, PROTOCOL_SWARMIT_PACKET);
-            __attribute__((aligned(4))) swrmt_notification_t notification = {
-                .device_id = _deviceid(),
-                .type = SWRMT_NOTIFICATION_OTA_START_ACK,
-            };
-            memcpy(_bootloader_vars.notification_buffer + sizeof(protocol_header_t), &notification, sizeof(swrmt_notification_t));
-            tdma_client_tx(_bootloader_vars.notification_buffer, sizeof(protocol_header_t) + sizeof(swrmt_notification_t));
+            size_t length = protocol_header_to_buffer(_bootloader_vars.notification_buffer, BROADCAST_ADDRESS);
+            _bootloader_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_OTA_START_ACK;
+            uint64_t device_id = _deviceid();
+            memcpy(_bootloader_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
+            length += sizeof(uint64_t);
+            tdma_client_tx(_bootloader_vars.notification_buffer, length);
         }
 
         if (_bootloader_vars.ota_chunk_request) {
@@ -307,14 +305,14 @@ int main(void) {
             nvmc_write((uint32_t *)addr, (void *)ipc_shared_data.ota.chunk, ipc_shared_data.ota.chunk_size);
 
             // Notify chunk has been written
-            protocol_header_to_buffer(_bootloader_vars.notification_buffer, BROADCAST_ADDRESS, DotBot, PROTOCOL_SWARMIT_PACKET);
-            __attribute__((aligned(4))) swrmt_notification_t notification = {
-                .device_id = _deviceid(),
-                .type = SWRMT_NOTIFICATION_OTA_CHUNK_ACK,
-            };
-            memcpy(_bootloader_vars.notification_buffer + sizeof(protocol_header_t), &notification, sizeof(swrmt_notification_t));
-            memcpy(_bootloader_vars.notification_buffer + sizeof(protocol_header_t) + sizeof(swrmt_notification_t), (void *)&ipc_shared_data.ota.chunk_index, sizeof(uint32_t));
-            tdma_client_tx(_bootloader_vars.notification_buffer, sizeof(protocol_header_t) + sizeof(swrmt_notification_t) + sizeof(uint32_t));
+            size_t length = protocol_header_to_buffer(_bootloader_vars.notification_buffer, BROADCAST_ADDRESS);
+            _bootloader_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_OTA_CHUNK_ACK;
+            uint64_t device_id = _deviceid();
+            memcpy(_bootloader_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
+            length += sizeof(uint64_t);
+            memcpy(_bootloader_vars.notification_buffer + length, (void *)&ipc_shared_data.ota.chunk_index, sizeof(uint32_t));
+            length += sizeof(uint32_t);
+            tdma_client_tx(_bootloader_vars.notification_buffer, length);
         }
 
         if (_bootloader_vars.start_experiment) {
