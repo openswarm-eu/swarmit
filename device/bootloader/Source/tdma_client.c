@@ -25,14 +25,13 @@ extern volatile __attribute__((section(".shared_data"))) ipc_shared_data_t ipc_s
 
 //=========================== public ===========================================
 
-void tdma_client_init(radio_mode_t radio_mode, uint8_t radio_freq, application_type_t default_radio_app) {
+void tdma_client_init(radio_mode_t radio_mode, uint8_t radio_freq) {
 
     // APPMUTEX (address at 0x41030000 => periph ID is 48)
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_MUTEX);
 
     // Store information in the shared data before sending it to the net-core
     ipc_shared_data.tdma_client.mode              = radio_mode;
-    ipc_shared_data.tdma_client.default_radio_app = default_radio_app;
     ipc_shared_data.tdma_client.frequency         = radio_freq;
 
     // Initialize TDMA client drv in the net-core

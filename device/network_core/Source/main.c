@@ -36,18 +36,17 @@ typedef struct {
 } swrmt_app_data_t;
 
 static swrmt_app_data_t _app_vars = { 0 };
-static uint8_t _buffer[UINT8_MAX] = { 0 };
+//static uint8_t _buffer[UINT8_MAX] = { 0 };
 
 volatile __attribute__((section(".shared_data"))) ipc_shared_data_t ipc_shared_data;
 
 //=========================== functions =========================================
 
 static void _handle_packet(uint8_t *packet, uint8_t length) {
-    memcpy(_buffer, packet + sizeof(protocol_header_t) - 1, length - sizeof(protocol_header_t) + 1);
-    uint8_t packet_type = _buffer[0];
-
-    if (packet_type == PROTOCOL_SWARMIT_PACKET) {
-        uint8_t *ptr = &_buffer[1];
+    memcpy(_app_vars.req_buffer, packet + sizeof(protocol_header_t), length - sizeof(protocol_header_t));
+    uint8_t *ptr = _app_vars.req_buffer;
+    uint8_t packet_type = (uint8_t)*ptr++;
+    if ((packet_type >= SWRMT_REQUEST_STATUS) && (packet_type <= SWRMT_REQUEST_OTA_CHUNK)) {
         uint64_t target_device_id;
         memcpy(&target_device_id, ptr, sizeof(uint64_t));
         if (target_device_id != _app_vars.device_id && target_device_id != 0) {
@@ -55,8 +54,6 @@ static void _handle_packet(uint8_t *packet, uint8_t length) {
             return;
         }
 
-        ptr += sizeof(uint64_t);
-        memcpy(_app_vars.req_buffer, ptr, length - sizeof(protocol_header_t) - 1 - sizeof(uint64_t) + 1);
         _app_vars.req_received = true;
         return;
     }
@@ -107,30 +104,29 @@ int main(void) {
             _app_vars.req_received = false;
             swrmt_request_t *req = (swrmt_request_t *)_app_vars.req_buffer;
             switch (req->type) {
-                case SWRMT_REQ_EXPERIMENT_START:
+                case SWRMT_REQUEST_START:
                     if (ipc_shared_data.status == SWRMT_EXPERIMENT_RUNNING) {
                         break;
                     }
                     NRF_IPC_NS->TASKS_SEND[IPC_CHAN_EXPERIMENT_START] = 1;
                     break;
-                case SWRMT_REQ_EXPERIMENT_STOP:
+                case SWRMT_REQUEST_STOP:
                     if (ipc_shared_data.status == SWRMT_EXPERIMENT_READY) {
                         break;
                     }
                     NRF_IPC_NS->TASKS_SEND[IPC_CHAN_EXPERIMENT_STOP] = 1;
                     break;
-                case SWRMT_REQ_EXPERIMENT_STATUS:
+                case SWRMT_REQUEST_STATUS:
                 {
-                    protocol_header_to_buffer(_app_vars.notification_buffer, BROADCAST_ADDRESS, DotBot, PROTOCOL_SWARMIT_PACKET);
-                    swrmt_notification_t notification = {
-                        .device_id = _deviceid(),
-                        .type = SWRMT_NOTIFICATION_STATUS,
-                    };
-                    memcpy(_app_vars.notification_buffer + sizeof(protocol_header_t), &notification, sizeof(swrmt_notification_t));
-                    memcpy(_app_vars.notification_buffer + sizeof(protocol_header_t) + sizeof(swrmt_notification_t), (void *)&ipc_shared_data.status, sizeof(uint8_t));
-                    tdma_client_tx(_app_vars.notification_buffer, sizeof(protocol_header_t) + sizeof(swrmt_notification_t) + sizeof(uint8_t));
+                    size_t length = protocol_header_to_buffer(_app_vars.notification_buffer, BROADCAST_ADDRESS);
+                    _app_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_STATUS;
+                    uint64_t device_id = _deviceid();
+                    memcpy(_app_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
+                    length += sizeof(uint64_t);
+                    _app_vars.notification_buffer[length++] = ipc_shared_data.status;
+                    tdma_client_tx(_app_vars.notification_buffer, length);
                 }   break;
-                case SWRMT_REQ_OTA_START:
+                case SWRMT_REQUEST_OTA_START:
                 {
                     if (ipc_shared_data.status == SWRMT_EXPERIMENT_RUNNING) {
                         break;
@@ -145,7 +141,7 @@ int main(void) {
                     mutex_unlock();
                     NRF_IPC_NS->TASKS_SEND[IPC_CHAN_OTA_START] = 1;
                 } break;
-                case SWRMT_REQ_OTA_CHUNK:
+                case SWRMT_REQUEST_OTA_CHUNK:
                 {
                     if (ipc_shared_data.status == SWRMT_EXPERIMENT_RUNNING) {
                         break;
@@ -168,7 +164,7 @@ int main(void) {
             switch (_app_vars.ipc_req) {
                 // TDMA Client functions
                 case IPC_TDMA_CLIENT_INIT_REQ:
-                    tdma_client_init(&_handle_packet, ipc_shared_data.tdma_client.mode, ipc_shared_data.tdma_client.frequency, ipc_shared_data.tdma_client.default_radio_app);
+                    tdma_client_init(&_handle_packet, ipc_shared_data.tdma_client.mode, ipc_shared_data.tdma_client.frequency);
                     break;
                 case IPC_TDMA_CLIENT_SET_TABLE_REQ:
                     tdma_client_set_table((const tdma_client_table_t *)&ipc_shared_data.tdma_client.table_set);
@@ -209,16 +205,17 @@ int main(void) {
         if (_app_vars.ipc_log_received) {
             _app_vars.ipc_log_received = false;
             // Notify log data
-            protocol_header_to_buffer(_app_vars.notification_buffer, BROADCAST_ADDRESS, DotBot, PROTOCOL_SWARMIT_PACKET);
-            swrmt_notification_t notification = {
-                .device_id = _deviceid(),
-                .type = SWRMT_NOTIFICATION_LOG_EVENT,
-            };
-            memcpy(_app_vars.notification_buffer + sizeof(protocol_header_t), &notification, sizeof(swrmt_notification_t));
+            size_t length = protocol_header_to_buffer(_app_vars.notification_buffer, BROADCAST_ADDRESS);
+            _app_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_LOG_EVENT;
+            uint64_t device_id = _deviceid();
+            memcpy(_app_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
+            length += sizeof(uint64_t);
             uint32_t timestamp = timer_hf_now(NETCORE_MAIN_TIMER);
-            memcpy(_app_vars.notification_buffer + sizeof(protocol_header_t) + sizeof(swrmt_notification_t), &timestamp, sizeof(uint32_t));
-            memcpy(_app_vars.notification_buffer + sizeof(protocol_header_t) + sizeof(swrmt_notification_t) + sizeof(uint32_t), (void *)&ipc_shared_data.log, sizeof(ipc_log_data_t));
-            tdma_client_tx(_app_vars.notification_buffer, sizeof(protocol_header_t) + sizeof(swrmt_notification_t) + sizeof(uint32_t) + sizeof(ipc_log_data_t));
+            memcpy(_app_vars.notification_buffer + length, &timestamp, sizeof(uint32_t));
+            length += sizeof(uint32_t);
+            memcpy(_app_vars.notification_buffer + length, (void *)&ipc_shared_data.log, ipc_shared_data.log.length + 1);
+            length += ipc_shared_data.log.length + 1;
+            tdma_client_tx(_app_vars.notification_buffer, length);
         }
     };
 }

@@ -13,33 +13,38 @@
 #include <string.h>
 #include "device.h"
 #include "protocol.h"
-#include "rng.h"
 
 //=========================== public ===========================================
 
-void protocol_init(void) {
-    rng_init();
-}
-
-void protocol_header_to_buffer(uint8_t *buffer, uint64_t dst,
-                                  application_type_t application, command_type_t command_type) {
-    uint64_t src    = db_device_id();
-    uint8_t  rnd[4] = { 0 };
-    for (uint8_t i = 0; i < 4; i++) {
-        rng_read(&rnd[i]);
-    }
-
-    uint32_t msg_id = 0;
-    memcpy(&msg_id, rnd, sizeof(uint32_t));
+static size_t _protocol_header_to_buffer(uint8_t *buffer, uint64_t dst, packet_type_t packet_type) {
+    uint64_t src = db_device_id();
 
     protocol_header_t header = {
+        .version     = FIRMWARE_VERSION,
+        .packet_type = packet_type,
         .dst         = dst,
         .src         = src,
-        .swarm_id    = SWARM_ID,
-        .application = application,
-        .version     = FIRMWARE_VERSION,
-        .msg_id      = msg_id,
-        .type        = command_type,
     };
     memcpy(buffer, &header, sizeof(protocol_header_t));
+    return sizeof(protocol_header_t);
+}
+
+size_t protocol_header_to_buffer(uint8_t *buffer, uint64_t dst) {
+    return _protocol_header_to_buffer(buffer, dst, PACKET_DATA);
+}
+
+size_t protocol_tdma_keep_alive_to_buffer(uint8_t *buffer, uint64_t dst) {
+    return _protocol_header_to_buffer(buffer, dst, PACKET_TDMA_KEEP_ALIVE);
+}
+
+size_t protocol_tdma_table_update_to_buffer(uint8_t *buffer, uint64_t dst, protocol_tdma_table_t *tdma_table) {
+    size_t header_length = _protocol_header_to_buffer(buffer, dst, PACKET_TDMA_UPDATE_TABLE);
+    memcpy(buffer + sizeof(protocol_header_t), tdma_table, sizeof(protocol_tdma_table_t));
+    return header_length + sizeof(protocol_tdma_table_t);
+}
+
+size_t protocol_tdma_sync_frame_to_buffer(uint8_t *buffer, uint64_t dst, protocol_sync_frame_t *sync_frame) {
+    size_t header_length = _protocol_header_to_buffer(buffer, dst, PACKET_TDMA_SYNC_FRAME);
+    memcpy(buffer + sizeof(protocol_header_t), sync_frame, sizeof(protocol_sync_frame_t));
+    return header_length + sizeof(protocol_sync_frame_t);
 }

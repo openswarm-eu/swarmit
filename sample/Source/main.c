@@ -10,21 +10,31 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
 #include <nrf.h>
 
 #define GPIO_P0_PIN (28)  // LED0 on nRF5340DK
+#define HEADER_LENGTH 19  // Version (1B) | Packet Type (1B) | Destination (8B) | Source (8B) = 19B total
 
 typedef void (*ipc_isr_cb_t)(const uint8_t *, size_t);
+typedef struct __attribute__((packed)) {
+    uint64_t device_id;
+    uint8_t length;
+    uint8_t content[UINT8_MAX];
+} msg_packet_t;
 
 void swarmit_reload_wdt0(void);
-void swarmit_send_packet(const uint8_t *packet, uint8_t length);
+void swarmit_send_data_packet(const uint8_t *packet, uint8_t length);
 void swarmit_ipc_isr(ipc_isr_cb_t cb);
 void swarmit_log_data(uint8_t *data, size_t length);
 static bool _timer_running = false;
 
 static void _rx_data_callback(const uint8_t *data, size_t length) {
-    printf("Message received (%dB): %s\n", length - 34, &data[34]);
+    (void)length;
+    msg_packet_t *msg = (msg_packet_t *)(data + HEADER_LENGTH);
+    msg->content[msg->length] = 0;
+    printf("Message received (%dB): %s\n", msg->length, msg->content);
 }
 
 static void delay_ms(uint32_t ms) {
@@ -50,7 +60,7 @@ int main(void) {
     while (1) {
         delay_ms(500);
         swarmit_reload_wdt0();
-        swarmit_send_packet((uint8_t *)"Hello", 5);
+        swarmit_send_data_packet((uint8_t *)"Hello", 5);
         swarmit_log_data((uint8_t *)"Logging", 7);
         // Crash on purpose
         //uint32_t *addr = 0x0;

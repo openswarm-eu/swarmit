@@ -54,9 +54,8 @@ typedef struct __attribute__((packed)) {
  * @param[in] callback             pointer to a function that will be called each time a packet is received.
  * @param[in] radio_mode           BLE mode used by the radio (1MBit, 2MBit, LR125KBit, LR500Kbit)
  * @param[in] radio_freq           Frequency of the radio [0, 100]
- * @param[in] default_radio_app    Which application to use for registration and sync messages
  */
-void tdma_client_init(radio_mode_t radio_mode, uint8_t radio_freq, application_type_t default_radio_app);
+void tdma_client_init(radio_mode_t radio_mode, uint8_t radio_freq);
 
 /**
  * @brief Updates the RX and TX timings for the TDMA table

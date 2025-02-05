@@ -13,54 +13,33 @@
  * @}
  */
 
+#include <stdlib.h>
 #include <stdint.h>
 
 //=========================== defines ==========================================
 
 #define FIRMWARE_VERSION  (9)                   ///< Version of the firmware
-#define SWARM_ID          (0x0000)              ///< Default swarm ID
 #define BROADCAST_ADDRESS 0xffffffffffffffffUL  ///< Broadcast address
 #define GATEWAY_ADDRESS   0x0000000000000000UL  ///< Gateway address
-#define MAX_WAYPOINTS     (16)                  ///< Max number of waypoints
 
-/// Command type
+/// Protocol packet type
 typedef enum {
-    PROTOCOL_CMD_MOVE_RAW       = 0,   ///< Move raw command type
-    PROTOCOL_CMD_RGB_LED        = 1,   ///< RGB LED command type
-    PROTOCOL_LH2_RAW_DATA       = 2,   ///< Lighthouse 2 raw data
-    PROTOCOL_LH2_LOCATION       = 3,   ///< Lighthouse processed locations
-    PROTOCOL_ADVERTISEMENT      = 4,   ///< DotBot advertisements
-    PROTOCOL_GPS_LOCATION       = 5,   ///< GPS data from SailBot
-    PROTOCOL_DOTBOT_DATA        = 6,   ///< DotBot specific data (for now location and direction)
-    PROTOCOL_CONTROL_MODE       = 7,   ///< Robot remote control mode (automatic or manual)
-    PROTOCOL_LH2_WAYPOINTS      = 8,   ///< List of LH2 waypoints to follow
-    PROTOCOL_GPS_WAYPOINTS      = 9,   ///< List of GPS waypoints to follow
-    PROTOCOL_SAILBOT_DATA       = 10,  ///< SailBot specific data (for now GPS and direction)
-    PROTOCOL_CMD_XGO_ACTION     = 11,  ///< XGO action command
-    PROTOCOL_LH2_PROCESSED_DATA = 12,  ///< Lighthouse 2 data processed at the DotBot
-    PROTOCOL_TDMA_UPDATE_TABLE  = 13,  ///< Receive new timings for the TDMA table
-    PROTOCOL_TDMA_SYNC_FRAME    = 14,  ///< Sent by the gateway at the beginning of a TDMA frame.
-    PROTOCOL_TDMA_KEEP_ALIVE    = 15,  ///< Sent by the client if there is nothing else to send.
-} command_type_t;
-
-/// Application type
-typedef enum {
-    DotBot        = 0,  ///< DotBot application
-    SailBot       = 1,  ///< SailBot application
-    FreeBot       = 2,  ///< FreeBot application
-    XGO           = 3,  ///< XGO application
-    LH2_mini_mote = 4,  ///< LH2 mini mote application
-} application_type_t;
+    PACKET_BEACON            = 1,  ///< Beacon packet
+    PACKET_JOIN_REQUEST      = 2,  ///< Join request packet
+    PACKET_JOIN_RESPONSE     = 3,  ///< Join response packet
+    PACKET_LEAVE             = 4,  ///< Leave packet
+    PACKET_DATA              = 5,  ///< Data packet
+    PACKET_TDMA_UPDATE_TABLE = 6,  ///< TDMA table update packet
+    PACKET_TDMA_SYNC_FRAME   = 7,  ///< TDMA sync frame packet
+    PACKET_TDMA_KEEP_ALIVE   = 8,  ///< TDMA keep alive packet
+} packet_type_t;
 
 /// DotBot protocol header
 typedef struct __attribute__((packed)) {
-    uint64_t           dst;          ///< Destination address of this packet
-    uint64_t           src;          ///< Source address of this packet
-    uint16_t           swarm_id;     ///< Swarm ID
-    application_type_t application;  ///< Application type
-    uint8_t            version;      ///< Version of the firmware
-    uint32_t           msg_id;       ///< Message ID
-    command_type_t     type;         ///< Type of command following this header
+    uint8_t       version;      ///< Version of the firmware
+    packet_type_t packet_type;  ///< Type of packet
+    uint64_t      dst;          ///< Destination address of this packet
+    uint64_t      src;          ///< Source address of this packet
 } protocol_header_t;
 
 ///< DotBot protocol TDMA table update [all units are in microseconds]
@@ -81,18 +60,45 @@ typedef struct __attribute__((packed)) {
 //=========================== public ===========================================
 
 /**
- * @brief   Initializes the RNG used as a source for random message IDs
- */
-void protocol_init(void);
-
-/**
  * @brief   Write the protocol header in a buffer
  *
- * @param[out]  buffer          Bytes array to write to
- * @param[in]   dst             Destination address written in the header
- * @param[in]   application     Application type that relates to this header
- * @param[in]   command_type    Command type that follows this header
+ * @param[out]  buffer      Bytes array to write to
+ * @param[in]   dst         Destination address written in the header
+ *
+ * @return                  Number of bytes written in the buffer
  */
-void protocol_header_to_buffer(uint8_t *buffer, uint64_t dst, application_type_t application, command_type_t command_type);
+size_t protocol_header_to_buffer(uint8_t *buffer, uint64_t dst);
+
+/**
+ * @brief   Write a TDMA keep alive packet in a buffer
+ *
+ * @param[out]  buffer      Bytes array to write to
+ * @param[in]   dst         Destination address written in the header
+ *
+ * @return                  Number of bytes written in the buffer
+ */
+size_t protocol_tdma_keep_alive_to_buffer(uint8_t *buffer, uint64_t dst);
+
+/**
+ * @brief   Write a TDMA table update in a buffer
+ *
+ * @param[out]  buffer      Bytes array to write to
+ * @param[in]   dst         Destination address written in the header
+ * @param[in]   tdma_table  Pointer to the TDMA table
+ *
+ * @return                  Number of bytes written in the buffer
+ */
+size_t protocol_tdma_table_update_to_buffer(uint8_t *buffer, uint64_t dst, protocol_tdma_table_t *tdma_table);
+
+/**
+ * @brief   Write a TDMA sync frame in a buffer
+ *
+ * @param[out]  buffer      Bytes array to write to
+ * @param[in]   dst         Destination address written in the header
+ * @param[in]   sync_frame  Pointer to the sync frame
+ *
+ * @return                  Number of bytes written in the buffer
+ */
+size_t protocol_tdma_sync_frame_to_buffer(uint8_t *buffer, uint64_t dst, protocol_sync_frame_t *sync_frame);
 
 #endif

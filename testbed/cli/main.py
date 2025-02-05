@@ -1,57 +1,38 @@
 #!/usr/bin/env python
 
+import dataclasses
 import logging
 import time
-
 from dataclasses import dataclass
-from enum import Enum
+from enum import Enum, IntEnum
 
 import click
 import serial
 import structlog
-
-from tqdm import tqdm
 from cryptography.hazmat.primitives import hashes
-
-from rich.console import Console
-from rich.live import Live
-from rich.table import Table
-
+from dotbot.hdlc import HDLCHandler, HDLCState, hdlc_encode
 from dotbot.logger import LOGGER
-from dotbot.hdlc import hdlc_encode, HDLCHandler, HDLCState
-from dotbot.protocol import PROTOCOL_VERSION, ProtocolHeader
+from dotbot.protocol import (
+    PROTOCOL_VERSION,
+    Frame,
+    Header,
+    Packet,
+    PacketFieldMetadata,
+    register_parser,
+)
 from dotbot.serial_interface import (
     SerialInterface,
     SerialInterfaceException,
     get_default_port,
 )
-
+from rich.console import Console
+from rich.live import Live
+from rich.table import Table
+from tqdm import tqdm
 
 SERIAL_PORT = get_default_port()
 BAUDRATE = 1000000
 CHUNK_SIZE = 128
-HEADER = ProtocolHeader()
-
-
-class NotificationType(Enum):
-    """Types of notifications."""
-
-    SWARMIT_NOTIFICATION_STATUS = 0
-    SWARMIT_NOTIFICATION_OTA_START_ACK = 1
-    SWARMIT_NOTIFICATION_OTA_CHUNK_ACK = 2
-    SWARMIT_NOTIFICATION_EVENT_GPIO = 3
-    SWARMIT_NOTIFICATION_EVENT_LOG = 4
-
-
-class RequestType(Enum):
-    """Types of requests."""
-
-    SWARMIT_REQ_EXPERIMENT_START = 1
-    SWARMIT_REQ_EXPERIMENT_STOP = 2
-    SWARMIT_REQ_EXPERIMENT_STATUS = 3
-    SWARMIT_REQ_OTA_START = 4
-    SWARMIT_REQ_OTA_CHUNK = 5
-    SWARMIT_MESSAGE = 0xff
 
 
 class StatusType(Enum):
@@ -62,6 +43,191 @@ class StatusType(Enum):
     Off = 2
 
 
+class SwarmitPayloadType(IntEnum):
+    """Types of DotBot payload types."""
+
+    SWARMIT_REQUEST_STATUS = 0x80
+    SWARMIT_REQUEST_START = 0x81
+    SWARMIT_REQUEST_STOP = 0x82
+    SWARMIT_REQUEST_OTA_START = 0x83
+    SWARMIT_REQUEST_OTA_CHUNK = 0x84
+    SWARMIT_NOTIFICATION_STATUS = 0x85
+    SWARMIT_NOTIFICATION_OTA_START_ACK = 0x86
+    SWARMIT_NOTIFICATION_OTA_CHUNK_ACK = 0x87
+    SWARMIT_NOTIFICATION_EVENT_GPIO = 0x88
+    SWARMIT_NOTIFICATION_EVENT_LOG = 0x89
+    SWARMIT_MESSAGE = 0x8A
+
+
+@dataclass
+class PayloadExperimentRequest(Packet):
+    """Dataclass that holds an experiment request packet (start/stop/status)."""
+
+    metadata: list[PacketFieldMetadata] = dataclasses.field(
+        default_factory=lambda: [
+            PacketFieldMetadata(name="device_id", disp="id", length=8),
+        ]
+    )
+
+    device_id: int = 0x0000000000000000
+
+
+@dataclass
+class PayloadExperimentStatusRequest(PayloadExperimentRequest):
+    """Dataclass that holds an experiment status request packet."""
+
+
+@dataclass
+class PayloadExperimentStartRequest(PayloadExperimentRequest):
+    """Dataclass that holds an experiment start request packet."""
+
+
+@dataclass
+class PayloadExperimentStopRequest(PayloadExperimentRequest):
+    """Dataclass that holds an experiment stop request packet."""
+
+
+@dataclass
+class PayloadOTAStartRequest(Packet):
+    """Dataclass that holds an OTA start packet."""
+
+    metadata: list[PacketFieldMetadata] = dataclasses.field(
+        default_factory=lambda: [
+            PacketFieldMetadata(name="device_id", disp="id", length=8),
+            PacketFieldMetadata(name="fw_length", disp="len.", length=4),
+            PacketFieldMetadata(name="fw_hash", disp="hash.", type_=bytes, length=32),
+        ]
+    )
+
+    device_id: int = 0x0000000000000000
+    fw_length: int = 0
+    fw_hash: bytes = dataclasses.field(default_factory=lambda: bytearray)
+
+
+@dataclass
+class PayloadOTAChunkRequest(Packet):
+    """Dataclass that holds an OTA chunk packet."""
+
+    metadata: list[PacketFieldMetadata] = dataclasses.field(
+        default_factory=lambda: [
+            PacketFieldMetadata(name="device_id", disp="id", length=8),
+            PacketFieldMetadata(name="index", disp="idx", length=4),
+            PacketFieldMetadata(name="count", disp="size"),
+            PacketFieldMetadata(name="chunk", type_=bytes, length=0),
+        ]
+    )
+
+    device_id: int = 0x0000000000000000
+    index: int = 0
+    count: int = 0
+    chunk: bytes = dataclasses.field(default_factory=lambda: bytearray)
+
+
+@dataclass
+class PayloadExperimentStatusNotification(Packet):
+    """Dataclass that holds an experiment status notification packet."""
+
+    metadata: list[PacketFieldMetadata] = dataclasses.field(
+        default_factory=lambda: [
+            PacketFieldMetadata(name="device_id", disp="id", length=8),
+            PacketFieldMetadata(name="status", disp="st."),
+        ]
+    )
+
+    device_id: int = 0x0000000000000000
+    status: StatusType = StatusType.Ready
+
+
+@dataclass
+class PayloadExperimentOTAStartAckNotification(Packet):
+    """Dataclass that holds an experiment OTA start ACK notification packet."""
+
+    metadata: list[PacketFieldMetadata] = dataclasses.field(
+        default_factory=lambda: [
+            PacketFieldMetadata(name="device_id", disp="id", length=8),
+        ]
+    )
+
+    device_id: int = 0x0000000000000000
+
+
+@dataclass
+class PayloadExperimentOTAChunkAckNotification(Packet):
+    """Dataclass that holds an experiment OTA chunk ACK notification packet."""
+
+    metadata: list[PacketFieldMetadata] = dataclasses.field(
+        default_factory=lambda: [
+            PacketFieldMetadata(name="device_id", disp="id", length=8),
+            PacketFieldMetadata(name="index", disp="idx"),
+        ]
+    )
+
+    device_id: int = 0x0000000000000000
+    index: int = 0
+
+
+@dataclass
+class PayloadExperimentEventNotification(Packet):
+    """Dataclass that holds an event notification packet."""
+
+    metadata: list[PacketFieldMetadata] = dataclasses.field(
+        default_factory=lambda: [
+            PacketFieldMetadata(name="device_id", disp="id", length=8),
+            PacketFieldMetadata(name="timestamp", disp="ts", length=4),
+            PacketFieldMetadata(name="count", disp="len."),
+            PacketFieldMetadata(name="data", disp="data", type_=bytes, length=0),
+        ]
+    )
+
+    device_id: int = 0x0000000000000000
+    timestamp: int = 0
+    count: int = 0
+    data: bytes = dataclasses.field(default_factory=lambda: bytearray)
+
+
+@dataclass
+class PayloadExperimentMessage(Packet):
+    """Dataclass that holds a message packet."""
+
+    metadata: list[PacketFieldMetadata] = dataclasses.field(
+        default_factory=lambda: [
+            PacketFieldMetadata(name="device_id", disp="id", length=8),
+            PacketFieldMetadata(name="count", disp="len."),
+            PacketFieldMetadata(name="message", disp="msg", type_=bytes, length=0),
+        ]
+    )
+
+    device_id: int = 0x0000000000000000
+    count: int = 0
+    message: bytes = dataclasses.field(default_factory=lambda: bytearray)
+
+
+# Register all swarmit specific parsers at module level
+register_parser(
+    SwarmitPayloadType.SWARMIT_REQUEST_STATUS, PayloadExperimentStatusRequest
+)
+register_parser(SwarmitPayloadType.SWARMIT_REQUEST_START, PayloadExperimentStartRequest)
+register_parser(SwarmitPayloadType.SWARMIT_REQUEST_STOP, PayloadExperimentStopRequest)
+register_parser(SwarmitPayloadType.SWARMIT_REQUEST_OTA_START, PayloadOTAStartRequest)
+register_parser(SwarmitPayloadType.SWARMIT_REQUEST_OTA_CHUNK, PayloadOTAChunkRequest)
+register_parser(
+    SwarmitPayloadType.SWARMIT_NOTIFICATION_STATUS, PayloadExperimentStatusNotification
+)
+register_parser(
+    SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_START_ACK,
+    PayloadExperimentOTAStartAckNotification,
+)
+register_parser(
+    SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_CHUNK_ACK,
+    PayloadExperimentOTAChunkAckNotification,
+)
+register_parser(
+    SwarmitPayloadType.SWARMIT_NOTIFICATION_EVENT_LOG,
+    PayloadExperimentEventNotification,
+)
+register_parser(SwarmitPayloadType.SWARMIT_MESSAGE, PayloadExperimentMessage)
+
+
 @dataclass
 class DataChunk:
     """Class that holds data chunks."""
@@ -69,17 +235,6 @@ class DataChunk:
     index: int
     size: int
     data: bytes
-
-
-def _header(swarmit=True):
-    """Return the header for the protocol."""
-    buffer = bytearray()
-    for field in ProtocolHeader().fields:
-        buffer += int(field.value).to_bytes(
-            length=field.length, byteorder="little", signed=field.signed
-        )
-    buffer += int(16 if swarmit is True else 0xff).to_bytes(length=1, byteorder="little")
-    return buffer
 
 
 class SwarmitFlash:
@@ -94,38 +249,42 @@ class SwarmitFlash:
         self.last_acked_index = -1
         self.chunks = []
         self.fw_hash = None
-        self.acked_ids = []
+        self.acked_ids: list[str] = []
 
     def on_byte_received(self, byte):
         self.hdlc_handler.handle_byte(byte)
         if self.hdlc_handler.state == HDLCState.READY:
-            payload = self.hdlc_handler.payload[25:]
-            if not payload or len(payload) < 9:
+            payload = self.hdlc_handler.payload
+            if not payload:
                 return
-            deviceid_ack = hex(int.from_bytes(payload[0:8], byteorder="little"))
-            if deviceid_ack not in self.acked_ids:
-                self.acked_ids.append(deviceid_ack)
-            if payload[8] == NotificationType.SWARMIT_NOTIFICATION_OTA_START_ACK.value:
+            frame = Frame().from_bytes(payload)
+            if frame.payload_type not in [
+                SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_START_ACK,
+                SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_CHUNK_ACK,
+            ]:
+                return
+            device_id = f"{frame.payload.device_id:08X}"
+            if device_id not in self.acked_ids:
+                self.acked_ids.append(device_id)
+            if (
+                frame.payload_type
+                == SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_START_ACK
+            ):
                 self.start_ack_received = True
             elif (
-                payload[8] == NotificationType.SWARMIT_NOTIFICATION_OTA_CHUNK_ACK.value
+                frame.payload_type
+                == SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_CHUNK_ACK
             ):
-                self.last_acked_index = int.from_bytes(
-                    payload[9:14], byteorder="little"
-                )
+                self.last_acked_index = frame.payload.index
 
-    def _send_start_ota(self, device_id):
-        buffer = bytearray()
-        buffer += _header()
-        buffer += int(device_id, 16).to_bytes(length=8, byteorder="little")
-        buffer += int(RequestType.SWARMIT_REQ_OTA_START.value).to_bytes(
-            length=1, byteorder="little"
+    def _send_start_ota(self, device_id: str):
+        payload = PayloadOTAStartRequest(
+            device_id=int(device_id), fw_length=len(self.firmware), fw_hash=self.fw_hash
         )
-        buffer += len(self.firmware).to_bytes(length=4, byteorder="little")
-        buffer += self.fw_hash
-        self.serial.write(hdlc_encode(buffer))
+        frame = Frame(header=Header(), payload=payload)
+        self.serial.write(hdlc_encode(frame.to_bytes()))
 
-    def init(self, device_ids):
+    def init(self, device_ids: list[str]):
         digest = hashes.Hash(hashes.SHA256())
         chunks_count = int(len(self.firmware) / CHUNK_SIZE) + int(
             len(self.firmware) % CHUNK_SIZE != 0
@@ -169,7 +328,7 @@ class SwarmitFlash:
                     time.sleep(0.0001)
         return self.acked_ids
 
-    def send_chunk(self, chunk, device_id):
+    def send_chunk(self, chunk, device_id: str):
         send_time = time.time()
         send = True
         tries = 0
@@ -189,16 +348,14 @@ class SwarmitFlash:
             if is_chunk_acknowledged():
                 break
             if send is True:
-                buffer = bytearray()
-                buffer += _header()
-                buffer += int(device_id, 16).to_bytes(length=8, byteorder="little")
-                buffer += int(RequestType.SWARMIT_REQ_OTA_CHUNK.value).to_bytes(
-                    length=1, byteorder="little"
+                payload = PayloadOTAChunkRequest(
+                    device_id=device_id,
+                    index=chunk.index,
+                    count=chunk.size,
+                    chunk=chunk.data,
                 )
-                buffer += int(chunk.index).to_bytes(length=4, byteorder="little")
-                buffer += int(chunk.size).to_bytes(length=1, byteorder="little")
-                buffer += chunk.data
-                self.serial.write(hdlc_encode(buffer))
+                frame = Frame(header=Header(), payload=payload)
+                self.serial.write(hdlc_encode(frame.to_bytes()))
                 send_time = time.time()
                 tries += 1
             time.sleep(0.001)
@@ -208,7 +365,7 @@ class SwarmitFlash:
         self.last_acked_index = -1
         self.last_deviceid_ack = None
 
-    def transfer(self, device_ids):
+    def transfer(self, device_ids: list[str]):
         data_size = len(self.firmware)
         progress = tqdm(
             range(0, data_size), unit="B", unit_scale=False, colour="green", ncols=100
@@ -235,13 +392,9 @@ class SwarmitStart:
         self.serial.write(int(PROTOCOL_VERSION).to_bytes(length=1))
 
     def _send_start(self, device_id):
-        buffer = bytearray()
-        buffer += _header()
-        buffer += int(device_id, 16).to_bytes(length=8, byteorder="little")
-        buffer += int(RequestType.SWARMIT_REQ_EXPERIMENT_START.value).to_bytes(
-            length=1, byteorder="little"
-        )
-        self.serial.write(hdlc_encode(buffer))
+        payload = PayloadExperimentStartRequest(device_id=device_id)
+        frame = Frame(header=Header(), payload=payload)
+        self.serial.write(hdlc_encode(frame.to_bytes()))
 
     def start(self, device_ids):
         if not device_ids:
@@ -264,13 +417,9 @@ class SwarmitStop:
         self.serial.write(int(PROTOCOL_VERSION).to_bytes(length=1))
 
     def _send_stop(self, device_id):
-        buffer = bytearray()
-        buffer += _header()
-        buffer += int(device_id, 16).to_bytes(length=8, byteorder="little")
-        buffer += int(RequestType.SWARMIT_REQ_EXPERIMENT_STOP.value).to_bytes(
-            length=1, byteorder="little"
-        )
-        self.serial.write(hdlc_encode(buffer))
+        payload = PayloadExperimentStopRequest(device_id=device_id)
+        frame = Frame(header=Header(), payload=payload)
+        self.serial.write(hdlc_encode(frame.to_bytes()))
 
     def stop(self, device_ids):
         if not device_ids:
@@ -285,12 +434,12 @@ class SwarmitStop:
 class SwarmitMonitor:
     """Class used to monitor an experiment."""
 
-    def __init__(self, port, baudrate, device_ids):
+    def __init__(self, port, baudrate, device_ids: list[str]):
         self.logger = LOGGER.bind(context=__name__)
         self.hdlc_handler = HDLCHandler()
         self.serial = SerialInterface(port, baudrate, self.on_byte_received)
         self.last_deviceid_notification = None
-        self.device_ids = device_ids
+        self.device_ids: list[str] = device_ids
         # Just write a single byte to fake a DotBot gateway handshake
         self.serial.write(int(PROTOCOL_VERSION).to_bytes(length=1))
 
@@ -299,26 +448,30 @@ class SwarmitMonitor:
             return
         self.hdlc_handler.handle_byte(byte)
         if self.hdlc_handler.state == HDLCState.READY:
-            payload = self.hdlc_handler.payload[25:]
-            if not payload or len(payload) < 9:
+            payload = self.hdlc_handler.payload
+            if not payload:
                 return
-            deviceid = int.from_bytes(payload[0:8], byteorder="little")
+            frame = Frame().from_bytes(payload)
+            if frame.payload_type not in [
+                SwarmitPayloadType.SWARMIT_NOTIFICATION_EVENT_GPIO,
+                SwarmitPayloadType.SWARMIT_NOTIFICATION_EVENT_LOG,
+            ]:
+                return
+            deviceid = f"{frame.payload.device_id:08X}"
             if self.device_ids and deviceid not in self.device_ids:
                 return
-            event = payload[8]
-            timestamp = int.from_bytes(payload[9:13], byteorder="little")
-            data_size = int(payload[13])
-            data = payload[14 : data_size + 14]
             logger = self.logger.bind(
-                deviceid=hex(deviceid),
-                notification=event,
-                time=timestamp,
-                data_size=data_size,
-                data=data,
+                deviceid=deviceid,
+                notification=frame.payload_type.name,
+                time=frame.payload.timestamp,
+                data_size=frame.payload.count,
+                data=frame.payload.data,
             )
-            if event == NotificationType.SWARMIT_NOTIFICATION_EVENT_GPIO.value:
+            if frame.payload_type == SwarmitPayloadType.SWARMIT_NOTIFICATION_EVENT_GPIO:
                 logger.info(f"GPIO event")
-            elif event == NotificationType.SWARMIT_NOTIFICATION_EVENT_LOG.value:
+            elif (
+                frame.payload_type == SwarmitPayloadType.SWARMIT_NOTIFICATION_EVENT_LOG
+            ):
                 logger.info(f"LOG event")
 
     def monitor(self):
@@ -334,7 +487,7 @@ class SwarmitStatus:
         self.hdlc_handler = HDLCHandler()
         self.last_deviceid_notification = None
         self.status_data = {}
-        self.resp_ids = []
+        self.resp_ids: list[str] = []
         self.table = Table()
         self.table.add_column("Device ID", style="magenta", no_wrap=True)
         self.table.add_column("Status", style="green")
@@ -347,29 +500,26 @@ class SwarmitStatus:
             return
         self.hdlc_handler.handle_byte(byte)
         if self.hdlc_handler.state == HDLCState.READY:
-            payload = self.hdlc_handler.payload[25:]
-            if not payload or len(payload) < 9:
+            payload = self.hdlc_handler.payload
+            if not payload:
                 return
-            deviceid_resp = hex(int.from_bytes(payload[0:8], byteorder="little"))
-            if deviceid_resp not in self.resp_ids:
-                self.resp_ids.append(deviceid_resp)
-            event = payload[8]
-            if event == NotificationType.SWARMIT_NOTIFICATION_STATUS.value:
-                status = StatusType(payload[9])
-                self.status_data[deviceid_resp] = status
-                self.table.add_row(
-                    deviceid_resp,
-                    f'{"[bold cyan]" if status == StatusType.Running else "[bold green]"}{status.name}',
-                )
+            frame = Frame().from_bytes(payload)
+            if frame.payload_type != SwarmitPayloadType.SWARMIT_NOTIFICATION_STATUS:
+                return
+            device_id = f"{frame.payload.device_id:08X}"
+            if device_id not in self.resp_ids:
+                self.resp_ids.append(device_id)
+            status = StatusType(frame.payload.status)
+            self.status_data[device_id] = status
+            self.table.add_row(
+                f"0x{device_id}",
+                f'{"[bold cyan]" if status == StatusType.Running else "[bold green]"}{status.name}',
+            )
 
     def status(self, display=True):
-        buffer = bytearray()
-        buffer += _header()
-        buffer += int("0", 16).to_bytes(length=8, byteorder="little")
-        buffer += int(RequestType.SWARMIT_REQ_EXPERIMENT_STATUS.value).to_bytes(
-            length=1, byteorder="little"
-        )
-        self.serial.write(hdlc_encode(buffer))
+        payload = PayloadExperimentStatusRequest(device_id=0)
+        frame = Frame(header=Header(), payload=payload)
+        self.serial.write(hdlc_encode(frame.to_bytes()))
         timeout = 0  # ms
         while timeout < 2000:
             timeout += 1
@@ -397,13 +547,13 @@ class SwarmitMessage:
         self.serial.write(int(PROTOCOL_VERSION).to_bytes(length=1))
 
     def _send_message(self, device_id, message):
-        buffer = bytearray()
-        buffer += _header(swarmit=False)
-        buffer += int(device_id, 16).to_bytes(length=8, byteorder="little")
-        buffer += int(RequestType.SWARMIT_MESSAGE.value).to_bytes(length=1, byteorder="little")
-        buffer += bytearray(message.encode("utf-8"))
-        buffer += b"\x00"
-        self.serial.write(hdlc_encode(buffer))
+        payload = PayloadExperimentMessage(
+            device_id=device_id,
+            count=len(message),
+            message=message.encode(),
+        )
+        frame = Frame(header=Header(), payload=payload)
+        self.serial.write(hdlc_encode(frame.to_bytes()))
 
     def send(self, message):
         if not self.device_ids:
@@ -525,7 +675,7 @@ def swarmit_message(port, baudrate, devices, message):
     print(f"Message '{message}' sent.")
 
 
-@click.group()
+@click.group(context_settings=dict(help_option_names=["-h", "--help"]))
 @click.option(
     "-p",
     "--port",

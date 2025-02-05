@@ -1,6 +1,7 @@
 #ifndef __PROTOCOL_H
 #define __PROTOCOL_H
 
+#include <stdlib.h>
 #include <stdint.h>
 
 #define FIRMWARE_VERSION  (9)                   ///< Version of the firmware
@@ -8,76 +9,55 @@
 #define BROADCAST_ADDRESS 0xffffffffffffffffUL  ///< Broadcast address
 #define GATEWAY_ADDRESS   0x0000000000000000UL  ///< Gateway address
 
-#define SWRMT_PREAMBLE_LENGTH       (8U)
 #define SWRMT_OTA_CHUNK_SIZE        (128U)
 #define SWRMT_OTA_SHA256_LENGTH     (32U)
-
-static const uint8_t swrmt_preamble[] = {
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07
-};
-
-#define SWRMT_REQ_EXPERIMENT_START  0x01        ///< Start the experiment
-#define SWRMT_REQ_EXPERIMENT_STOP   0x02        ///< Stop the experiment
-#define SWRMT_REQ_EXPERIMENT_STATUS 0x03        ///< Status of the experiment
-#define SWRMT_REQ_OTA_START         0x04        ///< Start OTA
-#define SWRMT_REQ_OTA_CHUNK         0x05        ///< OTA chunk
-
-/// Command type
-typedef enum {
-    PROTOCOL_CMD_MOVE_RAW       = 0,   ///< Move raw command type
-    PROTOCOL_CMD_RGB_LED        = 1,   ///< RGB LED command type
-    PROTOCOL_LH2_RAW_DATA       = 2,   ///< Lighthouse 2 raw data
-    PROTOCOL_LH2_LOCATION       = 3,   ///< Lighthouse processed locations
-    PROTOCOL_ADVERTISEMENT      = 4,   ///< DotBot advertisements
-    PROTOCOL_GPS_LOCATION       = 5,   ///< GPS data from SailBot
-    PROTOCOL_DOTBOT_DATA        = 6,   ///< DotBot specific data (for now location and direction)
-    PROTOCOL_CONTROL_MODE       = 7,   ///< Robot remote control mode (automatic or manual)
-    PROTOCOL_LH2_WAYPOINTS      = 8,   ///< List of LH2 waypoints to follow
-    PROTOCOL_GPS_WAYPOINTS      = 9,   ///< List of GPS waypoints to follow
-    PROTOCOL_SAILBOT_DATA       = 10,  ///< SailBot specific data (for now GPS and direction)
-    PROTOCOL_CMD_XGO_ACTION     = 11,  ///< XGO action command
-    PROTOCOL_LH2_PROCESSED_DATA = 12,  ///< Lighthouse 2 data processed at the DotBot
-    PROTOCOL_TDMA_UPDATE_TABLE  = 13,  ///< Receive new timings for the TDMA table
-    PROTOCOL_TDMA_SYNC_FRAME    = 14,  ///< Sent by the gateway at the beginning of a TDMA frame.
-    PROTOCOL_TDMA_KEEP_ALIVE    = 15,  ///< Sent by the client if there is nothing else to send.
-    PROTOCOL_SWARMIT_PACKET     = 16,  ///< Swarmit packet type
-} command_type_t;
-
-/// Application type
-typedef enum {
-    DotBot        = 0,  ///< DotBot application
-    SailBot       = 1,  ///< SailBot application
-    FreeBot       = 2,  ///< FreeBot application
-    XGO           = 3,  ///< XGO application
-    LH2_mini_mote = 4,  ///< LH2 mini mote application
-} application_type_t;
-
-/// DotBot protocol header
-typedef struct __attribute__((packed)) {
-    uint64_t           dst;          ///< Destination address of this packet
-    uint64_t           src;          ///< Source address of this packet
-    uint16_t           swarm_id;     ///< Swarm ID
-    application_type_t application;  ///< Application type
-    uint8_t            version;      ///< Version of the firmware
-    uint32_t           msg_id;       ///< Message ID
-    command_type_t     type;         ///< Type of command following this header
-} protocol_header_t;
 
 typedef enum {
     SWRMT_EXPERIMENT_READY,
     SWRMT_EXPERIMENT_RUNNING,
 } swrmt_experiment_status_t;
 
+typedef enum {
+    SWRMT_REQUEST_STATUS = 0x80,
+    SWRMT_REQUEST_START = 0x81,
+    SWRMT_REQUEST_STOP = 0x82,
+    SWRMT_REQUEST_OTA_START = 0x83,
+    SWRMT_REQUEST_OTA_CHUNK = 0x84,
+} swrmt_request_type_t;
+
+typedef enum {
+    SWRMT_NOTIFICATION_STATUS = 0x85,
+    SWRMT_NOTIFICATION_OTA_START_ACK = 0x86,
+    SWRMT_NOTIFICATION_OTA_CHUNK_ACK = 0x87,
+    SWRMT_NOTIFICATION_GPIO_EVENT = 0x88,
+    SWRMT_NOTIFICATION_LOG_EVENT = 0x89,
+} swrmt_notification_type_t;
+
+/// Protocol packet type
+typedef enum {
+    PACKET_BEACON            = 1,  ///< Beacon packet
+    PACKET_JOIN_REQUEST      = 2,  ///< Join request packet
+    PACKET_JOIN_RESPONSE     = 3,  ///< Join response packet
+    PACKET_LEAVE             = 4,  ///< Leave packet
+    PACKET_DATA              = 5,  ///< Data
+    PACKET_TDMA_UPDATE_TABLE = 6,  ///< TDMA table update packet
+    PACKET_TDMA_SYNC_FRAME   = 7,  ///< TDMA sync frame packet
+    PACKET_TDMA_KEEP_ALIVE   = 8,  ///< TDMA keep alive packet
+} packet_type_t;
+
+/// DotBot protocol header
 typedef struct __attribute__((packed)) {
-    uint8_t         type;                       ///< Request type
-    uint8_t         data[255 - SWRMT_PREAMBLE_LENGTH -1];                  ///< Data associated with the request
-} swrmt_request_t;
+    uint8_t       version;      ///< Version of the firmware
+    packet_type_t packet_type;  ///< Type of packet
+    uint64_t      dst;          ///< Destination address of this packet
+    uint64_t      src;          ///< Source address of this packet
+} protocol_header_t;
 
 typedef struct __attribute__((packed)) {
-    uint8_t         preamble[SWRMT_PREAMBLE_LENGTH];    ///< Preamble bytes
+    swrmt_request_type_t type;
     uint64_t        device_id;
-    swrmt_request_t request;                            ///< Request
-} swrmt_packet_t;
+    uint8_t         data[255];
+} swrmt_request_t;
 
 typedef struct __attribute__((packed)) { 
     uint32_t image_size;                        ///< User image size in bytes
@@ -89,19 +69,6 @@ typedef struct __attribute__((packed)) {
     uint8_t  chunk_size;                        ///< Size of the chunk
     uint8_t  chunk[SWRMT_OTA_CHUNK_SIZE];       ///< Bytes array of the firmware chunk
 } swrmt_ota_chunk_pkt_t;
-
-typedef enum {
-    SWRMT_NOTIFICATION_STATUS,
-    SWRMT_NOTIFICATION_OTA_START_ACK,
-    SWRMT_NOTIFICATION_OTA_CHUNK_ACK,
-    SWRMT_NOTIFICATION_GPIO_EVENT,
-    SWRMT_NOTIFICATION_LOG_EVENT,
-} swrmt_notification_type_t;
-
-typedef struct __attribute__((packed)) {
-    uint64_t                    device_id;
-    swrmt_notification_type_t   type;
-} swrmt_notification_t;
 
 typedef struct __attribute__((packed)) {
     uint8_t port;  ///< Port number of the GPIO
@@ -130,18 +97,45 @@ typedef struct __attribute__((packed)) {
 } protocol_sync_frame_t;
 
 /**
- * @brief   Initializes the RNG used as a source for random message IDs
- */
-void protocol_init(void);
-
-/**
  * @brief   Write the protocol header in a buffer
  *
- * @param[out]  buffer          Bytes array to write to
- * @param[in]   dst             Destination address written in the header
- * @param[in]   application     Application type that relates to this header
- * @param[in]   command_type    Command type that follows this header
+ * @param[out]  buffer      Bytes array to write to
+ * @param[in]   dst         Destination address written in the header
+ *
+ * @return                  Number of bytes written in the buffer
  */
-void protocol_header_to_buffer(uint8_t *buffer, uint64_t dst, application_type_t application, command_type_t command_type);
+size_t protocol_header_to_buffer(uint8_t *buffer, uint64_t dst);
+
+/**
+ * @brief   Write a TDMA keep alive packet in a buffer
+ *
+ * @param[out]  buffer      Bytes array to write to
+ * @param[in]   dst         Destination address written in the header
+ *
+ * @return                  Number of bytes written in the buffer
+ */
+size_t protocol_tdma_keep_alive_to_buffer(uint8_t *buffer, uint64_t dst);
+
+/**
+ * @brief   Write a TDMA table update in a buffer
+ *
+ * @param[out]  buffer      Bytes array to write to
+ * @param[in]   dst         Destination address written in the header
+ * @param[in]   tdma_table  Pointer to the TDMA table
+ *
+ * @return                  Number of bytes written in the buffer
+ */
+size_t protocol_tdma_table_update_to_buffer(uint8_t *buffer, uint64_t dst, protocol_tdma_table_t *tdma_table);
+
+/**
+ * @brief   Write a TDMA sync frame in a buffer
+ *
+ * @param[out]  buffer      Bytes array to write to
+ * @param[in]   dst         Destination address written in the header
+ * @param[in]   sync_frame  Pointer to the sync frame
+ *
+ * @return                  Number of bytes written in the buffer
+ */
+size_t protocol_tdma_sync_frame_to_buffer(uint8_t *buffer, uint64_t dst, protocol_sync_frame_t *sync_frame);
 
 #endif  // __PROTOCOL_H

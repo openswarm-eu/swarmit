@@ -67,7 +67,6 @@ typedef struct __attribute__((packed)) {
 
 typedef struct __attribute__((packed)) {
     radio_mode_t               mode;                ///< radio_init function parameters
-    application_type_t         default_radio_app;   ///< radio_init function parameters
     uint8_t                    frequency;           ///< db_set_frequency function parameters
     tdma_client_table_t        table_set;           ///< tdma_client_set_table function parameter
     tdma_client_table_t        table_get;           ///< tdma_client_get_table function parameter

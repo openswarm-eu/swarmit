@@ -19,6 +19,9 @@
 #include "timer_hf.h"
 #include "protocol.h"
 #include "device.h"
+#if defined(NRF5340_XXAA) && defined(NRF_NETWORK)
+#include "ipc.h"
+#endif
 
 //=========================== defines ==========================================
 
@@ -53,8 +56,6 @@ typedef struct {
     tdma_client_ring_buffer_t    tx_ring_buffer;                        ///< ring buffer to queue the outgoing packets
     uint8_t                      byte_onair_time;                       ///< How many microseconds it takes to send a byte of data
     uint8_t                      radio_buffer[RADIO_MESSAGE_MAX_SIZE];  ///< Internal buffer that contains the command to send (from buttons)
-    application_type_t           default_radio_app;                     ///< Which application to use for registration and sync messages
-
 } tdma_client_vars_t;
 
 //=========================== variables ========================================
@@ -79,7 +80,7 @@ static void timer_rx_interrupt(void);
 
 /**
  * @brief Updates the RX and TX timings for the TDMA table.
- *        Directly from an PROTOCOL_TDMA_UPDATE_TABLE packet.
+ *        Directly from an PACKET_TDMA_UPDATE_TABLE packet.
  *
  * @param[in] table       New table of TDMA timings
  */
@@ -139,7 +140,7 @@ static uint32_t _get_random_delay_us(void);
 
 //=========================== public ===========================================
 
-void tdma_client_init(tdma_client_cb_t callback, radio_mode_t radio_mode, uint8_t radio_freq, application_type_t default_radio_app) {
+void tdma_client_init(tdma_client_cb_t callback, radio_mode_t radio_mode, uint8_t radio_freq) {
 
     // Initialize high frequency clock
     timer_hf_init(TDMA_CLIENT_TIMER_HF);
@@ -163,9 +164,6 @@ void tdma_client_init(tdma_client_cb_t callback, radio_mode_t radio_mode, uint8_
 
     // Save the on-air byte time
     _tdma_client_vars.byte_onair_time = ble_mode_to_byte_time[radio_mode];
-
-    // Save default radio application
-    _tdma_client_vars.default_radio_app = default_radio_app;
 
     // Set the default time table
     _tdma_client_vars.tdma_client_table.frame_duration = TDMA_CLIENT_DEFAULT_FRAME_DURATION;
@@ -306,7 +304,7 @@ static bool _message_rb_tx_queue(uint16_t max_tx_duration_us) {
     // Update the last packet timer
     _tdma_client_vars.last_tx_packet_timestamp = start_tx_slot;
 
-    // re-enable the Radio RX
+    // renable the Radio RX
     if (_tdma_client_vars.rx_flag == TDMA_CLIENT_RX_ON) {
         radio_rx();
     }
@@ -316,16 +314,16 @@ static bool _message_rb_tx_queue(uint16_t max_tx_duration_us) {
 
 static void _tx_keep_alive_message(void) {
 
-    protocol_header_to_buffer(_tdma_client_vars.radio_buffer, BROADCAST_ADDRESS, _tdma_client_vars.default_radio_app, PROTOCOL_TDMA_KEEP_ALIVE);
+    size_t length = protocol_tdma_keep_alive_to_buffer(_tdma_client_vars.radio_buffer, BROADCAST_ADDRESS);
     radio_disable();
-    radio_tx(_tdma_client_vars.radio_buffer, sizeof(protocol_header_t));
+    radio_tx(_tdma_client_vars.radio_buffer, length);
 }
 
 static void _tx_tdma_register_message(void) {
 
-    protocol_header_to_buffer(_tdma_client_vars.radio_buffer, BROADCAST_ADDRESS, _tdma_client_vars.default_radio_app, PROTOCOL_TDMA_KEEP_ALIVE);
+    size_t length = protocol_tdma_keep_alive_to_buffer(_tdma_client_vars.radio_buffer, BROADCAST_ADDRESS);
     radio_disable();
-    radio_tx(_tdma_client_vars.radio_buffer, sizeof(protocol_header_t));
+    radio_tx(_tdma_client_vars.radio_buffer, length);
 }
 
 static uint32_t _get_random_delay_us(void) {
@@ -351,17 +349,15 @@ static uint32_t _get_random_delay_us(void) {
 static void tdma_client_callback(uint8_t *packet, uint8_t length) {
 
     uint8_t           *ptk_ptr = packet;
-    protocol_header_t header = { 0 };
-    memcpy(&header, packet, sizeof(protocol_header_t));
-    uint8_t header_type = (uint8_t)header.type;
+    protocol_header_t *header  = (protocol_header_t *)ptk_ptr;
 
     // Check destination address matches
-    if (header.dst != BROADCAST_ADDRESS && header.dst != _tdma_client_vars.device_id) {
+    if (header->dst != BROADCAST_ADDRESS && header->dst != _tdma_client_vars.device_id) {
         return;
     }
 
     // Check version is supported
-    if (header.version != FIRMWARE_VERSION) {
+    if (header->version != FIRMWARE_VERSION) {
         return;
     }
 
@@ -369,8 +365,8 @@ static void tdma_client_callback(uint8_t *packet, uint8_t length) {
     // We don't know it a priori
 
     // check and process the TDMA packets
-    switch (header_type) {
-        case PROTOCOL_TDMA_UPDATE_TABLE:
+    switch (header->packet_type) {
+        case PACKET_TDMA_UPDATE_TABLE:
         {
             // Get the payload
             uint8_t              *cmd_ptr = ptk_ptr + sizeof(protocol_header_t);
@@ -395,7 +391,7 @@ static void tdma_client_callback(uint8_t *packet, uint8_t length) {
 
         } break;
 
-        case PROTOCOL_TDMA_SYNC_FRAME:
+        case PACKET_TDMA_SYNC_FRAME:
         {
             // There is no payload for this packet
             // Only resync the timer if the DotBot has already been registered.
@@ -431,17 +427,19 @@ static void tdma_client_callback(uint8_t *packet, uint8_t length) {
             }
         } break;
 
-        case PROTOCOL_TDMA_KEEP_ALIVE:
+        case PACKET_TDMA_KEEP_ALIVE:
             // ignore
             break;
 
-        // This is not a TDMA packet, send to the user callback
-        default:
-        {
+        case PACKET_DATA:
             if (_tdma_client_vars.callback) {
                 _tdma_client_vars.callback(packet, length);
             }
-        }
+            break;
+
+        // This is not a valid packet, ignore it
+        default:
+            break;
     }
 }
 
