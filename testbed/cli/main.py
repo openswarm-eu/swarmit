@@ -95,7 +95,9 @@ class PayloadOTAStartRequest(Packet):
         default_factory=lambda: [
             PacketFieldMetadata(name="device_id", disp="id", length=8),
             PacketFieldMetadata(name="fw_length", disp="len.", length=4),
-            PacketFieldMetadata(name="fw_hash", disp="hash.", type_=bytes, length=32),
+            PacketFieldMetadata(
+                name="fw_hash", disp="hash.", type_=bytes, length=32
+            ),
         ]
     )
 
@@ -175,7 +177,9 @@ class PayloadExperimentEventNotification(Packet):
             PacketFieldMetadata(name="device_id", disp="id", length=8),
             PacketFieldMetadata(name="timestamp", disp="ts", length=4),
             PacketFieldMetadata(name="count", disp="len."),
-            PacketFieldMetadata(name="data", disp="data", type_=bytes, length=0),
+            PacketFieldMetadata(
+                name="data", disp="data", type_=bytes, length=0
+            ),
         ]
     )
 
@@ -193,7 +197,9 @@ class PayloadExperimentMessage(Packet):
         default_factory=lambda: [
             PacketFieldMetadata(name="device_id", disp="id", length=8),
             PacketFieldMetadata(name="count", disp="len."),
-            PacketFieldMetadata(name="message", disp="msg", type_=bytes, length=0),
+            PacketFieldMetadata(
+                name="message", disp="msg", type_=bytes, length=0
+            ),
         ]
     )
 
@@ -206,12 +212,21 @@ class PayloadExperimentMessage(Packet):
 register_parser(
     SwarmitPayloadType.SWARMIT_REQUEST_STATUS, PayloadExperimentStatusRequest
 )
-register_parser(SwarmitPayloadType.SWARMIT_REQUEST_START, PayloadExperimentStartRequest)
-register_parser(SwarmitPayloadType.SWARMIT_REQUEST_STOP, PayloadExperimentStopRequest)
-register_parser(SwarmitPayloadType.SWARMIT_REQUEST_OTA_START, PayloadOTAStartRequest)
-register_parser(SwarmitPayloadType.SWARMIT_REQUEST_OTA_CHUNK, PayloadOTAChunkRequest)
 register_parser(
-    SwarmitPayloadType.SWARMIT_NOTIFICATION_STATUS, PayloadExperimentStatusNotification
+    SwarmitPayloadType.SWARMIT_REQUEST_START, PayloadExperimentStartRequest
+)
+register_parser(
+    SwarmitPayloadType.SWARMIT_REQUEST_STOP, PayloadExperimentStopRequest
+)
+register_parser(
+    SwarmitPayloadType.SWARMIT_REQUEST_OTA_START, PayloadOTAStartRequest
+)
+register_parser(
+    SwarmitPayloadType.SWARMIT_REQUEST_OTA_CHUNK, PayloadOTAChunkRequest
+)
+register_parser(
+    SwarmitPayloadType.SWARMIT_NOTIFICATION_STATUS,
+    PayloadExperimentStatusNotification,
 )
 register_parser(
     SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_START_ACK,
@@ -244,7 +259,9 @@ class SwarmitFlash:
         self.serial = SerialInterface(port, baudrate, self.on_byte_received)
         self.hdlc_handler = HDLCHandler()
         self.start_ack_received = False
-        self.firmware = bytearray(firmware.read()) if firmware is not None else None
+        self.firmware = (
+            bytearray(firmware.read()) if firmware is not None else None
+        )
         self.known_devices = known_devices
         self.last_acked_index = -1
         self.chunks = []
@@ -279,7 +296,9 @@ class SwarmitFlash:
 
     def _send_start_ota(self, device_id: str):
         payload = PayloadOTAStartRequest(
-            device_id=int(device_id), fw_length=len(self.firmware), fw_hash=self.fw_hash
+            device_id=int(device_id),
+            fw_length=len(self.firmware),
+            fw_hash=self.fw_hash,
         )
         frame = Frame(header=Header(), payload=payload)
         self.serial.write(hdlc_encode(frame.to_bytes()))
@@ -340,7 +359,8 @@ class SwarmitFlash:
                 ) == sorted(self.known_devices)
             else:
                 return (
-                    self.last_acked_index == chunk.index and device_id in self.acked_ids
+                    self.last_acked_index == chunk.index
+                    and device_id in self.acked_ids
                 )
 
         self.acked_ids = []
@@ -361,16 +381,24 @@ class SwarmitFlash:
             time.sleep(0.001)
             send = time.time() - send_time > 0.1
         else:
-            raise Exception(f"chunk #{chunk.index} not acknowledged. Aborting.")
+            raise Exception(
+                f"chunk #{chunk.index} not acknowledged. Aborting."
+            )
         self.last_acked_index = -1
         self.last_deviceid_ack = None
 
     def transfer(self, device_ids: list[str]):
         data_size = len(self.firmware)
         progress = tqdm(
-            range(0, data_size), unit="B", unit_scale=False, colour="green", ncols=100
+            range(0, data_size),
+            unit="B",
+            unit_scale=False,
+            colour="green",
+            ncols=100,
         )
-        progress.set_description(f"Loading firmware ({int(data_size / 1024)}kB)")
+        progress.set_description(
+            f"Loading firmware ({int(data_size / 1024)}kB)"
+        )
         for chunk in self.chunks:
             if not device_ids:
                 self.send_chunk(chunk, "0")
@@ -467,12 +495,16 @@ class SwarmitMonitor:
                 data_size=frame.payload.count,
                 data=frame.payload.data,
             )
-            if frame.payload_type == SwarmitPayloadType.SWARMIT_NOTIFICATION_EVENT_GPIO:
-                logger.info(f"GPIO event")
-            elif (
-                frame.payload_type == SwarmitPayloadType.SWARMIT_NOTIFICATION_EVENT_LOG
+            if (
+                frame.payload_type
+                == SwarmitPayloadType.SWARMIT_NOTIFICATION_EVENT_GPIO
             ):
-                logger.info(f"LOG event")
+                logger.info("GPIO event")
+            elif (
+                frame.payload_type
+                == SwarmitPayloadType.SWARMIT_NOTIFICATION_EVENT_LOG
+            ):
+                logger.info("LOG event")
 
     def monitor(self):
         while True:
@@ -504,7 +536,10 @@ class SwarmitStatus:
             if not payload:
                 return
             frame = Frame().from_bytes(payload)
-            if frame.payload_type != SwarmitPayloadType.SWARMIT_NOTIFICATION_STATUS:
+            if (
+                frame.payload_type
+                != SwarmitPayloadType.SWARMIT_NOTIFICATION_STATUS
+            ):
                 return
             device_id = f"{frame.payload.device_id:08X}"
             if device_id not in self.resp_ids:
@@ -571,7 +606,7 @@ def swarmit_flash(port, baudrate, firmware, yes, devices, ready_devices):
     except (
         SerialInterfaceException,
         serial.serialutil.SerialException,
-    ) as exc:
+    ):
         console = Console()
         console.print("[bold red]Error:[/] {exc}")
         return False
@@ -693,14 +728,16 @@ def swarmit_message(port, baudrate, devices, message):
     "--devices",
     type=str,
     default="",
-    help=f"Subset list of devices to interact with, separated with ,",
+    help="Subset list of devices to interact with, separated with ,",
 )
 @click.pass_context
 def main(ctx, port, baudrate, devices):
     if ctx.invoked_subcommand != "monitor":
         # Disable logging if not monitoring
         structlog.configure(
-            wrapper_class=structlog.make_filtering_bound_logger(logging.CRITICAL),
+            wrapper_class=structlog.make_filtering_bound_logger(
+                logging.CRITICAL
+            ),
         )
     ctx.ensure_object(dict)
     ctx.obj["port"] = port
@@ -711,7 +748,9 @@ def main(ctx, port, baudrate, devices):
 @main.command()
 @click.pass_context
 def start(ctx):
-    known_devices = swarmit_status(ctx.obj["port"], ctx.obj["baudrate"], display=False)
+    known_devices = swarmit_status(
+        ctx.obj["port"], ctx.obj["baudrate"], display=False
+    )
     ready_devices = sorted(
         [
             device
@@ -720,14 +759,19 @@ def start(ctx):
         ]
     )
     swarmit_start(
-        ctx.obj["port"], ctx.obj["baudrate"], list(ctx.obj["devices"]), ready_devices
+        ctx.obj["port"],
+        ctx.obj["baudrate"],
+        list(ctx.obj["devices"]),
+        ready_devices,
     )
 
 
 @main.command()
 @click.pass_context
 def stop(ctx):
-    known_devices = swarmit_status(ctx.obj["port"], ctx.obj["baudrate"], display=False)
+    known_devices = swarmit_status(
+        ctx.obj["port"], ctx.obj["baudrate"], display=False
+    )
     running_devices = sorted(
         [
             device
@@ -736,7 +780,10 @@ def stop(ctx):
         ]
     )
     swarmit_stop(
-        ctx.obj["port"], ctx.obj["baudrate"], list(ctx.obj["devices"]), running_devices
+        ctx.obj["port"],
+        ctx.obj["baudrate"],
+        list(ctx.obj["devices"]),
+        running_devices,
     )
 
 
@@ -753,14 +800,18 @@ def stop(ctx):
     is_flag=True,
     help="Start the firmware once flashed.",
 )
-@click.argument("firmware", type=click.File(mode="rb", lazy=True), required=False)
+@click.argument(
+    "firmware", type=click.File(mode="rb", lazy=True), required=False
+)
 @click.pass_context
 def flash(ctx, yes, start, firmware):
     console = Console()
     if firmware is None:
         console.print("[bold red]Error:[/] Missing firmware file. Exiting.")
         ctx.exit()
-    known_devices = swarmit_status(ctx.obj["port"], ctx.obj["baudrate"], display=False)
+    known_devices = swarmit_status(
+        ctx.obj["port"], ctx.obj["baudrate"], display=False
+    )
     ready_devices = sorted(
         [
             device
@@ -808,7 +859,9 @@ def status(ctx):
 @click.argument("message", type=str, required=True)
 @click.pass_context
 def message(ctx, message):
-    swarmit_message(ctx.obj["port"], ctx.obj["baudrate"], ctx.obj["devices"], message)
+    swarmit_message(
+        ctx.obj["port"], ctx.obj["baudrate"], ctx.obj["devices"], message
+    )
 
 
 if __name__ == "__main__":

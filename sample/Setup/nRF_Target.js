@@ -16,4 +16,3 @@ function Reset() {
 function EnableTrace(traceInterfaceType) {
   // TODO: Enable trace
 }
-
