@@ -59,12 +59,12 @@ typedef struct __attribute__((packed)) {
     uint8_t         data[255];
 } swrmt_request_t;
 
-typedef struct __attribute__((packed)) { 
+typedef struct __attribute__((packed)) {
     uint32_t image_size;                        ///< User image size in bytes
     uint8_t hash[SWRMT_OTA_SHA256_LENGTH];      ///< SHA256 hash of the firmware
 } swrmt_ota_start_pkt_t;
 
-typedef struct __attribute__((packed)) { 
+typedef struct __attribute__((packed)) {
     uint32_t index;                             ///< Index of the chunk
     uint8_t  chunk_size;                        ///< Size of the chunk
     uint8_t  chunk[SWRMT_OTA_CHUNK_SIZE];       ///< Bytes array of the firmware chunk
