@@ -68,6 +68,9 @@ class PayloadOTAStartRequest(Packet):
             PacketFieldMetadata(name="device_id", disp="id", length=8),
             PacketFieldMetadata(name="fw_length", disp="len.", length=4),
             PacketFieldMetadata(
+                name="fw_chunk_counts", disp="chunks", length=4
+            ),
+            PacketFieldMetadata(
                 name="fw_hash", disp="hash.", type_=bytes, length=32
             ),
         ]
@@ -75,6 +78,7 @@ class PayloadOTAStartRequest(Packet):
 
     device_id: int = 0x0000000000000000
     fw_length: int = 0
+    fw_chunk_count: int = 0
     fw_hash: bytes = dataclasses.field(default_factory=lambda: bytearray)
 
 
@@ -132,12 +136,14 @@ class PayloadExperimentOTAChunkAckNotification(Packet):
     metadata: list[PacketFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
             PacketFieldMetadata(name="device_id", disp="id", length=8),
-            PacketFieldMetadata(name="index", disp="idx"),
+            PacketFieldMetadata(name="index", disp="idx", length=4),
+            PacketFieldMetadata(name="hashes_match", disp="match"),
         ]
     )
 
     device_id: int = 0x0000000000000000
     index: int = 0
+    hashes_match: int = 0
 
 
 @dataclass

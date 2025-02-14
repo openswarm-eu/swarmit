@@ -55,7 +55,7 @@ def main(ctx, port, baudrate, edge, devices):
     ctx.obj["port"] = port
     ctx.obj["baudrate"] = baudrate
     ctx.obj["edge"] = edge
-    ctx.obj["devices"] = [e for e in devices.split(",") if e]
+    ctx.obj["devices"] = [e[2:] for e in devices.split(",") if e]
 
 
 @main.command()
@@ -150,6 +150,9 @@ def flash(ctx, yes, start, firmware):
         experiment.terminate()
         return
     start_time = time.time()
+    print(
+        f"Devices to flash ({len(experiment.ready_devices)}): [{', '.join(experiment.ready_devices)}]"
+    )
     print(f"Image size: {len(fw)}B")
     print("")
     if yes is False:
