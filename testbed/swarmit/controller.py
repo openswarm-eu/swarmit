@@ -1,4 +1,4 @@
-"""Module containing the swarmit experiment class."""
+"""Module containing the swarmit controller class."""
 
 import dataclasses
 import time
@@ -22,12 +22,12 @@ from testbed.swarmit.adapter import (
     SerialAdapter,
 )
 from testbed.swarmit.protocol import (
-    PayloadExperimentMessage,
-    PayloadExperimentStartRequest,
-    PayloadExperimentStatusRequest,
-    PayloadExperimentStopRequest,
+    PayloadMessage,
     PayloadOTAChunkRequest,
     PayloadOTAStartRequest,
+    PayloadStartRequest,
+    PayloadStatusRequest,
+    PayloadStopRequest,
     StatusType,
     SwarmitPayloadType,
     register_parsers,
@@ -56,8 +56,8 @@ class TransferDataStatus:
 
 
 @dataclass
-class ExperimentSettings:
-    """Class that holds experiment settings."""
+class ControllerSettings:
+    """Class that holds controller settings."""
 
     serial_port: str = SERIAL_PORT_DEFAULT
     serial_baudrate: int = 1000000
@@ -67,10 +67,10 @@ class ExperimentSettings:
     devices: list[str] = dataclasses.field(default_factory=lambda: [])
 
 
-class Experiment:
-    """Class used to control an experiment."""
+class Controller:
+    """Class used to control a swarm testbed."""
 
-    def __init__(self, settings: ExperimentSettings):
+    def __init__(self, settings: ControllerSettings):
         self.logger = LOGGER.bind(context=__name__)
         self.settings = settings
         self._interface: GatewayAdapterBase = None
@@ -156,7 +156,7 @@ class Experiment:
         return self._interface
 
     def terminate(self):
-        """Terminate the experiment."""
+        """Terminate the controller."""
         self.interface.close()
 
     def send_frame(self, frame: Frame):
@@ -235,9 +235,9 @@ class Experiment:
             )
 
     def status(self, display=True):
-        """Request the status of the experiment."""
+        """Request the status of the testbed."""
         self.status_data: dict[str, StatusType] = {}
-        payload = PayloadExperimentStatusRequest(device_id=0)
+        payload = PayloadStatusRequest(device_id=0)
         frame = Frame(header=Header(), payload=payload)
         self.expected_reply = SwarmitPayloadType.SWARMIT_NOTIFICATION_STATUS
         self.send_frame(frame)
@@ -262,14 +262,12 @@ class Experiment:
         return self.status_data
 
     def _send_start(self, device_id: str):
-        payload = PayloadExperimentStartRequest(
-            device_id=int(device_id, base=16)
-        )
+        payload = PayloadStartRequest(device_id=int(device_id, base=16))
         self.send_frame(Frame(header=Header(), payload=payload))
         time.sleep(0.01)
 
     def start(self):
-        """Start the experiment."""
+        """Start the application."""
         ready_devices = self.ready_devices
         if not self.settings.devices:
             self._send_start("0")
@@ -280,14 +278,12 @@ class Experiment:
                 self._send_start(device_id)
 
     def _send_stop(self, device_id: str):
-        payload = PayloadExperimentStopRequest(
-            device_id=int(device_id, base=16)
-        )
+        payload = PayloadStopRequest(device_id=int(device_id, base=16))
         self.send_frame(Frame(header=Header(), payload=payload))
         time.sleep(0.01)
 
     def stop(self):
-        """Stop the experiment."""
+        """Stop the application."""
         running_devices = self.running_devices
         if not self.settings.devices:
             self._send_stop("0")
@@ -298,13 +294,13 @@ class Experiment:
                 self._send_stop(device_id)
 
     def monitor(self):
-        """Monitor the experiment."""
-        self.logger.info("Monitoring experiment")
+        """Monitor the testbed."""
+        self.logger.info("Monitoring testbed")
         while True:
             time.sleep(0.01)
 
     def _send_message(self, device_id, message):
-        payload = PayloadExperimentMessage(
+        payload = PayloadMessage(
             device_id=int(device_id, base=16),
             count=len(message),
             message=message.encode(),
@@ -324,6 +320,15 @@ class Experiment:
                 self._send_message(device_id, message)
 
     def _send_start_ota(self, device_id: str, firmware: bytes):
+
+        def is_start_ota_acknowledged():
+            if device_id == "0":
+                return sorted(self.start_ota_data) == sorted(
+                    self.ready_devices
+                )
+            else:
+                return device_id in self.start_ota_data
+
         payload = PayloadOTAStartRequest(
             device_id=int(device_id, base=16),
             fw_length=len(firmware),
@@ -331,6 +336,10 @@ class Experiment:
             fw_hash=self.fw_hash,
         )
         self.send_frame(Frame(header=Header(), payload=payload))
+        timeout = 0  # in seconds
+        while timeout < 3 and not is_start_ota_acknowledged():
+            timeout += 0.001
+            time.sleep(0.001)
 
     def start_ota(self, firmware):
         """Start the OTA process."""
@@ -355,7 +364,7 @@ class Experiment:
                     data=data,
                 )
             )
-        print(f"Radio chunks ({CHUNK_SIZE}B): {len(self.chunks)}")
+        print(f"Radio chunks ([bold]{CHUNK_SIZE}B[/bold]): {len(self.chunks)}")
         self.fw_hash = digest.finalize()
         self.expected_reply = (
             SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_START_ACK
@@ -364,27 +373,14 @@ class Experiment:
         if not self.settings.devices:
             print("Broadcast start ota notification...")
             self._send_start_ota("0", firmware)
-            timeout = 0  # ms
-            while timeout < 20000 and sorted(self.start_ota_data) != sorted(
-                self.ready_devices
-            ):
-                timeout += 1
-                time.sleep(0.0001)
         else:
             for device_id in self.settings.devices:
                 print(f"Sending start ota notification to {device_id}...")
                 self._send_start_ota(device_id, firmware)
-                timeout = 0  # ms
-                while timeout < 20000 and device_id not in self.start_ota_data:
-                    timeout += 1
-                    time.sleep(0.0001)
         self.expected_reply = None
         return self.start_ota_data
 
     def send_chunk(self, chunk, device_id: str):
-        send_time = time.time()
-        send = True
-        tries = 0
 
         def is_chunk_acknowledged():
             if device_id == "0":
@@ -412,6 +408,9 @@ class Experiment:
                     == chunk.index
                 )
 
+        send_time = time.time()
+        send = True
+        tries = 0
         while tries < 5:
             if is_chunk_acknowledged():
                 break
@@ -437,6 +436,7 @@ class Experiment:
 
     def transfer(self, firmware):
         """Transfer the firmware to the devices."""
+        start_time = time.time()
         data_size = len(firmware)
         progress = tqdm(
             range(0, data_size),
@@ -469,13 +469,24 @@ class Experiment:
             progress.update(chunk.size)
         progress.close()
         self.expected_reply = None
+        print(
+            f"Elapsed: [bold cyan]{time.time() - start_time:.3f}s[/bold cyan]"
+        )
+        print()
+        print("[bold]Transfer status:[/bold]")
         with Live(self.transfer_status_table, refresh_per_second=4) as live:
             live.update(self.transfer_status_table)
             for device_id, status in sorted(self.transfer_data.items()):
+                start_marker, stop_marker = (
+                    ("[bold green]", "[/bold green]")
+                    if bool(status.hashes_match) is True
+                    else ("[bold red]", "[/bold red]")
+                )
                 self.transfer_status_table.add_row(
                     f"0x{device_id}",
                     f"{len(status.chunks_acked)}/{len(self.chunks)}",
-                    f"{bool(status.hashes_match)}",
+                    f"{start_marker}{bool(status.hashes_match)}{stop_marker}",
                 )
+        print()
         # print(self.transfer_data)
         return self.transfer_data

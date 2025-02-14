@@ -1,15 +1,15 @@
 #!/usr/bin/env python
 
 import logging
-import time
 
 import click
 import serial
 import structlog
 from dotbot.serial_interface import SerialInterfaceException, get_default_port
+from rich import print
 from rich.console import Console
 
-from testbed.swarmit.experiment import Experiment, ExperimentSettings
+from testbed.swarmit.controller import Controller, ControllerSettings
 
 SERIAL_PORT_DEFAULT = get_default_port()
 BAUDRATE_DEFAULT = 1000000
@@ -62,7 +62,7 @@ def main(ctx, port, baudrate, edge, devices):
 @click.pass_context
 def start(ctx):
     try:
-        settings = ExperimentSettings(
+        settings = ControllerSettings(
             serial_port=ctx.obj["port"],
             serial_baudrate=ctx.obj["baudrate"],
             mqtt_host="argus.paris.inria.fr",
@@ -70,7 +70,7 @@ def start(ctx):
             edge=ctx.obj["edge"],
             devices=list(ctx.obj["devices"]),
         )
-        experiment = Experiment(settings)
+        controller = Controller(settings)
     except (
         SerialInterfaceException,
         serial.serialutil.SerialException,
@@ -78,19 +78,19 @@ def start(ctx):
         console = Console()
         console.print(f"[bold red]Error:[/] {exc}")
         return
-    if experiment.ready_devices:
-        experiment.start()
-        print("Experiment started.")
+    if controller.ready_devices:
+        controller.start()
+        print("Application started.")
     else:
         print("No ready devices")
-    experiment.terminate()
+    controller.terminate()
 
 
 @main.command()
 @click.pass_context
 def stop(ctx):
     try:
-        settings = ExperimentSettings(
+        settings = ControllerSettings(
             serial_port=ctx.obj["port"],
             serial_baudrate=ctx.obj["baudrate"],
             mqtt_host="argus.paris.inria.fr",
@@ -98,7 +98,7 @@ def stop(ctx):
             edge=ctx.obj["edge"],
             devices=list(ctx.obj["devices"]),
         )
-        experiment = Experiment(settings)
+        controller = Controller(settings)
     except (
         SerialInterfaceException,
         serial.serialutil.SerialException,
@@ -106,12 +106,12 @@ def stop(ctx):
         console = Console()
         console.print(f"[bold red]Error:[/] {exc}")
         return
-    if experiment.running_devices:
-        experiment.stop()
-        print("Experiment stopped.")
+    if controller.running_devices:
+        controller.stop()
+        print("Application stopped.")
     else:
         print("No running devices")
-    experiment.terminate()
+    controller.terminate()
 
 
 @main.command()
@@ -136,7 +136,7 @@ def flash(ctx, yes, start, firmware):
         ctx.exit()
 
     fw = bytearray(firmware.read())
-    settings = ExperimentSettings(
+    settings = ControllerSettings(
         serial_port=ctx.obj["port"],
         serial_baudrate=ctx.obj["baudrate"],
         mqtt_host="argus.paris.inria.fr",
@@ -144,53 +144,50 @@ def flash(ctx, yes, start, firmware):
         edge=ctx.obj["edge"],
         devices=ctx.obj["devices"],
     )
-    experiment = Experiment(settings)
-    if not experiment.ready_devices:
+    controller = Controller(settings)
+    if not controller.ready_devices:
         console.print("[bold red]Error:[/] No ready devices found. Exiting.")
-        experiment.terminate()
+        controller.terminate()
         return
-    start_time = time.time()
     print(
-        f"Devices to flash ({len(experiment.ready_devices)}): [{', '.join(experiment.ready_devices)}]"
+        f"Devices to flash ([bold white]{len(controller.ready_devices)}[/bold white]): [[magenta]{', '.join(controller.ready_devices)}[/magenta]]"
     )
-    print(f"Image size: {len(fw)}B")
+    print(f"Image size: [bold cyan]{len(fw)}B[/bold cyan]")
     print("")
     if yes is False:
         click.confirm("Do you want to continue?", default=True, abort=True)
 
-    devices = experiment.settings.devices
-    ids = experiment.start_ota(fw)
+    devices = controller.settings.devices
+    ids = controller.start_ota(fw)
     if (devices and sorted(ids) != sorted(devices)) or (
-        not devices and sorted(ids) != sorted(experiment.ready_devices)
+        not devices and sorted(ids) != sorted(controller.ready_devices)
     ):
         console = Console()
         console.print(
             "[bold red]Error:[/] some acknowledgments are missing "
-            f'({", ".join(sorted(set(experiment.ready_devices).difference(set(ids))))}). '
+            f'({", ".join(sorted(set(controller.ready_devices).difference(set(ids))))}). '
             "Aborting."
         )
         raise click.Abort()
     try:
-        experiment.transfer(fw)
+        controller.transfer(fw)
     except Exception as exc:
-        experiment.terminate()
+        controller.terminate()
         console = Console()
         console.print(f"[bold red]Error:[/] transfer of image failed: {exc}")
         raise click.Abort()
-    finally:
-        print(f"Elapsed: {time.time() - start_time:.3f}s")
 
     if start is True:
-        experiment.start()
-        print("Experiment started.")
-    experiment.terminate()
+        controller.start()
+        print("Application started.")
+    controller.terminate()
 
 
 @main.command()
 @click.pass_context
 def monitor(ctx):
     try:
-        settings = ExperimentSettings(
+        settings = ControllerSettings(
             serial_port=ctx.obj["port"],
             serial_baudrate=ctx.obj["baudrate"],
             mqtt_host="argus.paris.inria.fr",
@@ -198,7 +195,7 @@ def monitor(ctx):
             edge=ctx.obj["edge"],
             devices=ctx.obj["devices"],
         )
-        experiment = Experiment(settings)
+        controller = Controller(settings)
     except (
         SerialInterfaceException,
         serial.serialutil.SerialException,
@@ -207,17 +204,17 @@ def monitor(ctx):
         console.print(f"[bold red]Error:[/] {exc}")
         return {}
     try:
-        experiment.monitor()
+        controller.monitor()
     except KeyboardInterrupt:
         print("Stopping monitor.")
     finally:
-        experiment.terminate()
+        controller.terminate()
 
 
 @main.command()
 @click.pass_context
 def status(ctx):
-    settings = ExperimentSettings(
+    settings = ControllerSettings(
         serial_port=ctx.obj["port"],
         serial_baudrate=ctx.obj["baudrate"],
         mqtt_host="argus.paris.inria.fr",
@@ -225,17 +222,17 @@ def status(ctx):
         edge=ctx.obj["edge"],
         devices=ctx.obj["devices"],
     )
-    experiment = Experiment(settings)
-    if not experiment.status():
+    controller = Controller(settings)
+    if not controller.status():
         click.echo("No devices found.")
-    experiment.terminate()
+    controller.terminate()
 
 
 @main.command()
 @click.argument("message", type=str, required=True)
 @click.pass_context
 def message(ctx, message):
-    settings = ExperimentSettings(
+    settings = ControllerSettings(
         serial_port=ctx.obj["port"],
         serial_baudrate=ctx.obj["baudrate"],
         mqtt_host="argus.paris.inria.fr",
@@ -243,9 +240,9 @@ def message(ctx, message):
         edge=ctx.obj["edge"],
         devices=ctx.obj["devices"],
     )
-    experiment = Experiment(settings)
-    experiment.send_message(message)
-    experiment.terminate()
+    controller = Controller(settings)
+    controller.send_message(message)
+    controller.terminate()
 
 
 if __name__ == "__main__":

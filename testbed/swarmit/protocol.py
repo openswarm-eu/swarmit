@@ -32,8 +32,8 @@ class SwarmitPayloadType(IntEnum):
 
 
 @dataclass
-class PayloadExperimentRequest(Packet):
-    """Dataclass that holds an experiment request packet (start/stop/status)."""
+class PayloadRequest(Packet):
+    """Dataclass that holds an application request packet (start/stop/status)."""
 
     metadata: list[PacketFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
@@ -45,18 +45,18 @@ class PayloadExperimentRequest(Packet):
 
 
 @dataclass
-class PayloadExperimentStatusRequest(PayloadExperimentRequest):
-    """Dataclass that holds an experiment status request packet."""
+class PayloadStatusRequest(PayloadRequest):
+    """Dataclass that holds an application status request packet."""
 
 
 @dataclass
-class PayloadExperimentStartRequest(PayloadExperimentRequest):
-    """Dataclass that holds an experiment start request packet."""
+class PayloadStartRequest(PayloadRequest):
+    """Dataclass that holds an application start request packet."""
 
 
 @dataclass
-class PayloadExperimentStopRequest(PayloadExperimentRequest):
-    """Dataclass that holds an experiment stop request packet."""
+class PayloadStopRequest(PayloadRequest):
+    """Dataclass that holds an application stop request packet."""
 
 
 @dataclass
@@ -102,8 +102,8 @@ class PayloadOTAChunkRequest(Packet):
 
 
 @dataclass
-class PayloadExperimentStatusNotification(Packet):
-    """Dataclass that holds an experiment status notification packet."""
+class PayloadStatusNotification(Packet):
+    """Dataclass that holds an application status notification packet."""
 
     metadata: list[PacketFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
@@ -117,8 +117,8 @@ class PayloadExperimentStatusNotification(Packet):
 
 
 @dataclass
-class PayloadExperimentOTAStartAckNotification(Packet):
-    """Dataclass that holds an experiment OTA start ACK notification packet."""
+class PayloadOTAStartAckNotification(Packet):
+    """Dataclass that holds an application OTA start ACK notification packet."""
 
     metadata: list[PacketFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
@@ -130,8 +130,8 @@ class PayloadExperimentOTAStartAckNotification(Packet):
 
 
 @dataclass
-class PayloadExperimentOTAChunkAckNotification(Packet):
-    """Dataclass that holds an experiment OTA chunk ACK notification packet."""
+class PayloadOTAChunkAckNotification(Packet):
+    """Dataclass that holds an application OTA chunk ACK notification packet."""
 
     metadata: list[PacketFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
@@ -147,7 +147,7 @@ class PayloadExperimentOTAChunkAckNotification(Packet):
 
 
 @dataclass
-class PayloadExperimentEventNotification(Packet):
+class PayloadEventNotification(Packet):
     """Dataclass that holds an event notification packet."""
 
     metadata: list[PacketFieldMetadata] = dataclasses.field(
@@ -168,7 +168,7 @@ class PayloadExperimentEventNotification(Packet):
 
 
 @dataclass
-class PayloadExperimentMessage(Packet):
+class PayloadMessage(Packet):
     """Dataclass that holds a message packet."""
 
     metadata: list[PacketFieldMetadata] = dataclasses.field(
@@ -190,13 +190,13 @@ def register_parsers():
     # Register all swarmit specific parsers at module level
     register_parser(
         SwarmitPayloadType.SWARMIT_REQUEST_STATUS,
-        PayloadExperimentStatusRequest,
+        PayloadStatusRequest,
     )
     register_parser(
-        SwarmitPayloadType.SWARMIT_REQUEST_START, PayloadExperimentStartRequest
+        SwarmitPayloadType.SWARMIT_REQUEST_START, PayloadStartRequest
     )
     register_parser(
-        SwarmitPayloadType.SWARMIT_REQUEST_STOP, PayloadExperimentStopRequest
+        SwarmitPayloadType.SWARMIT_REQUEST_STOP, PayloadStopRequest
     )
     register_parser(
         SwarmitPayloadType.SWARMIT_REQUEST_OTA_START, PayloadOTAStartRequest
@@ -206,20 +206,18 @@ def register_parsers():
     )
     register_parser(
         SwarmitPayloadType.SWARMIT_NOTIFICATION_STATUS,
-        PayloadExperimentStatusNotification,
+        PayloadStatusNotification,
     )
     register_parser(
         SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_START_ACK,
-        PayloadExperimentOTAStartAckNotification,
+        PayloadOTAStartAckNotification,
     )
     register_parser(
         SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_CHUNK_ACK,
-        PayloadExperimentOTAChunkAckNotification,
+        PayloadOTAChunkAckNotification,
     )
     register_parser(
         SwarmitPayloadType.SWARMIT_NOTIFICATION_EVENT_LOG,
-        PayloadExperimentEventNotification,
+        PayloadEventNotification,
     )
-    register_parser(
-        SwarmitPayloadType.SWARMIT_MESSAGE, PayloadExperimentMessage
-    )
+    register_parser(SwarmitPayloadType.SWARMIT_MESSAGE, PayloadMessage)
