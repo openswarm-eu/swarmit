@@ -195,6 +195,7 @@ uint64_t _deviceid(void) {
 }
 
 int main(void) {
+    ipc_shared_data.status = SWRMT_APPLICATION_RESETTING;
 
     setup_watchdog1();
 
@@ -243,13 +244,21 @@ int main(void) {
         (resetreas & RESET_RESETREAS_DOG0_Detected << RESET_RESETREAS_DOG0_Pos) ||
         (resetreas & RESET_RESETREAS_DOG1_Detected << RESET_RESETREAS_DOG1_Pos)
     )) {
+        // Experiment is running
+        ipc_shared_data.status = SWRMT_APPLICATION_RUNNING;
+
+        // Notify application is about to start
+        size_t length = protocol_header_to_buffer(_bootloader_vars.notification_buffer, BROADCAST_ADDRESS);
+        _bootloader_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_STARTED;
+        uint64_t device_id = _deviceid();
+        memcpy(_bootloader_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
+        length += sizeof(uint64_t);
+        tdma_client_tx(_bootloader_vars.notification_buffer, length);
+
         // Initialize watchdog and non secure access
         setup_ns_user();
         setup_watchdog0();
         NVIC_SetTargetState(IPC_IRQn);
-
-        // Experiment is running
-        ipc_shared_data.status = SWRMT_EXPERIMENT_RUNNING;
 
         // Set the vector table address prior to jumping to image
         SCB_NS->VTOR = (uint32_t)table;
@@ -264,6 +273,17 @@ int main(void) {
         reset_handler_ns();
 
         while (1) {}
+    }
+
+    if (resetreas & RESET_RESETREAS_DOG1_Detected << RESET_RESETREAS_DOG1_Pos) {
+        // Notify application is stopped
+        size_t length = protocol_header_to_buffer(_bootloader_vars.notification_buffer, BROADCAST_ADDRESS);
+        //size_t length = 0;
+        _bootloader_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_STOPPED;
+        uint64_t device_id = _deviceid();
+        memcpy(_bootloader_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
+        length += sizeof(uint64_t);
+        tdma_client_tx(_bootloader_vars.notification_buffer, length);
     }
 
     _bootloader_vars.base_addr = SWARMIT_BASE_ADDRESS;
