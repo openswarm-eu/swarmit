@@ -37,8 +37,8 @@ typedef enum {
 typedef enum {
     IPC_CHAN_REQ                = 0,    ///< Channel used for request events
     IPC_CHAN_RADIO_RX           = 1,    ///< Channel used for radio RX events
-    IPC_CHAN_EXPERIMENT_START   = 2,    ///< Channel used for starting the experiment
-    IPC_CHAN_EXPERIMENT_STOP    = 3,    ///< Channel used for stopping the experiment
+    IPC_CHAN_APPLICATION_START  = 2,    ///< Channel used for starting the experiment
+    IPC_CHAN_APPLICATION_STOP   = 3,    ///< Channel used for stopping the experiment
     IPC_CHAN_LOG_EVENT          = 4,    ///< Channel used for logging events
     IPC_CHAN_OTA_START          = 5,    ///< Channel used for starting an OTA process
     IPC_CHAN_OTA_CHUNK          = 6,    ///< Channel used for writing a non secure image chunk

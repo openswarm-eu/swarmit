@@ -61,7 +61,7 @@ static void _handle_packet(uint8_t *packet, uint8_t length) {
     }
 
     // ignore other types of packet if not in running mode
-    if (ipc_shared_data.status != SWRMT_EXPERIMENT_RUNNING) {
+    if (ipc_shared_data.status != SWRMT_APPLICATION_RUNNING) {
         return;
     }
 
@@ -82,8 +82,8 @@ int main(void) {
 
     NRF_IPC_NS->INTENSET                            = (1 << IPC_CHAN_REQ) | (1 << IPC_CHAN_LOG_EVENT);
     NRF_IPC_NS->SEND_CNF[IPC_CHAN_RADIO_RX]         = 1 << IPC_CHAN_RADIO_RX;
-    NRF_IPC_NS->SEND_CNF[IPC_CHAN_EXPERIMENT_START] = 1 << IPC_CHAN_EXPERIMENT_START;
-    NRF_IPC_NS->SEND_CNF[IPC_CHAN_EXPERIMENT_STOP]  = 1 << IPC_CHAN_EXPERIMENT_STOP;
+    NRF_IPC_NS->SEND_CNF[IPC_CHAN_APPLICATION_START] = 1 << IPC_CHAN_APPLICATION_START;
+    NRF_IPC_NS->SEND_CNF[IPC_CHAN_APPLICATION_STOP]  = 1 << IPC_CHAN_APPLICATION_STOP;
     NRF_IPC_NS->SEND_CNF[IPC_CHAN_OTA_START]        = 1 << IPC_CHAN_OTA_START;
     NRF_IPC_NS->SEND_CNF[IPC_CHAN_OTA_CHUNK]        = 1 << IPC_CHAN_OTA_CHUNK;
     NRF_IPC_NS->RECEIVE_CNF[IPC_CHAN_REQ]           = 1 << IPC_CHAN_REQ;
@@ -107,16 +107,17 @@ int main(void) {
             swrmt_request_t *req = (swrmt_request_t *)_app_vars.req_buffer;
             switch (req->type) {
                 case SWRMT_REQUEST_START:
-                    if (ipc_shared_data.status == SWRMT_EXPERIMENT_RUNNING) {
+                    if (ipc_shared_data.status == SWRMT_APPLICATION_RUNNING) {
                         break;
                     }
-                    NRF_IPC_NS->TASKS_SEND[IPC_CHAN_EXPERIMENT_START] = 1;
+                    NRF_IPC_NS->TASKS_SEND[IPC_CHAN_APPLICATION_START] = 1;
                     break;
                 case SWRMT_REQUEST_STOP:
-                    if (ipc_shared_data.status == SWRMT_EXPERIMENT_READY) {
+                    if (ipc_shared_data.status == SWRMT_APPLICATION_READY) {
                         break;
                     }
-                    NRF_IPC_NS->TASKS_SEND[IPC_CHAN_EXPERIMENT_STOP] = 1;
+                    ipc_shared_data.status = SWRMT_APPLICATION_RESETTING;
+                    NRF_IPC_NS->TASKS_SEND[IPC_CHAN_APPLICATION_STOP] = 1;
                     break;
                 case SWRMT_REQUEST_STATUS:
                 {
@@ -130,7 +131,7 @@ int main(void) {
                 }   break;
                 case SWRMT_REQUEST_OTA_START:
                 {
-                    if (ipc_shared_data.status == SWRMT_EXPERIMENT_RUNNING) {
+                    if (ipc_shared_data.status == SWRMT_APPLICATION_RUNNING) {
                         break;
                     }
                     const swrmt_ota_start_pkt_t *pkt = (const swrmt_ota_start_pkt_t *)req->data;
@@ -151,7 +152,7 @@ int main(void) {
                 } break;
                 case SWRMT_REQUEST_OTA_CHUNK:
                 {
-                    if (ipc_shared_data.status == SWRMT_EXPERIMENT_RUNNING) {
+                    if (ipc_shared_data.status == SWRMT_APPLICATION_RUNNING) {
                         break;
                     }
                     const swrmt_ota_chunk_pkt_t *pkt = (const swrmt_ota_chunk_pkt_t *)req->data;

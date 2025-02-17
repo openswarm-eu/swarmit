@@ -210,12 +210,12 @@ int main(void) {
     tz_configure_ram_non_secure(3, 1);
 
     // Configure IPC interrupts and channels used to interact with the network core.
-    NRF_IPC_S->INTENSET                                 = (1 << IPC_CHAN_RADIO_RX | 1 << IPC_CHAN_OTA_START | 1 << IPC_CHAN_OTA_CHUNK | 1 << IPC_CHAN_EXPERIMENT_START);
+    NRF_IPC_S->INTENSET                                 = (1 << IPC_CHAN_RADIO_RX | 1 << IPC_CHAN_OTA_START | 1 << IPC_CHAN_OTA_CHUNK | 1 << IPC_CHAN_APPLICATION_START);
     NRF_IPC_S->SEND_CNF[IPC_CHAN_REQ]                   = 1 << IPC_CHAN_REQ;
     NRF_IPC_S->SEND_CNF[IPC_CHAN_LOG_EVENT]             = 1 << IPC_CHAN_LOG_EVENT;
     NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_RADIO_RX]           = 1 << IPC_CHAN_RADIO_RX;
-    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_EXPERIMENT_START]   = 1 << IPC_CHAN_EXPERIMENT_START;
-    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_EXPERIMENT_STOP]    = 1 << IPC_CHAN_EXPERIMENT_STOP;
+    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_APPLICATION_START]  = 1 << IPC_CHAN_APPLICATION_START;
+    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_APPLICATION_STOP]   = 1 << IPC_CHAN_APPLICATION_STOP;
     NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_OTA_START]          = 1 << IPC_CHAN_OTA_START;
     NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_OTA_CHUNK]          = 1 << IPC_CHAN_OTA_CHUNK;
     NVIC_EnableIRQ(IPC_IRQn);
@@ -226,7 +226,7 @@ int main(void) {
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_DPPIC);
     NRF_SPU_S->DPPI[0].PERM &= ~(SPU_DPPI_PERM_CHANNEL0_Msk);
     NRF_SPU_S->DPPI[0].LOCK |= SPU_DPPI_LOCK_LOCK_Locked << SPU_DPPI_LOCK_LOCK_Pos;
-    NRF_IPC_S->PUBLISH_RECEIVE[IPC_CHAN_EXPERIMENT_STOP] = IPC_PUBLISH_RECEIVE_EN_Enabled << IPC_PUBLISH_RECEIVE_EN_Pos;
+    NRF_IPC_S->PUBLISH_RECEIVE[IPC_CHAN_APPLICATION_STOP] = IPC_PUBLISH_RECEIVE_EN_Enabled << IPC_PUBLISH_RECEIVE_EN_Pos;
     NRF_WDT1_S->SUBSCRIBE_START = WDT_SUBSCRIBE_START_EN_Enabled << WDT_SUBSCRIBE_START_EN_Pos;
     NRF_DPPIC_NS->CHENSET = (DPPIC_CHENSET_CH0_Enabled << DPPIC_CHENSET_CH0_Pos);
     NRF_DPPIC_S->CHENSET = (DPPIC_CHENSET_CH0_Enabled << DPPIC_CHENSET_CH0_Pos);
@@ -269,7 +269,7 @@ int main(void) {
     _bootloader_vars.base_addr = SWARMIT_BASE_ADDRESS;
 
     // Experiment is ready
-    ipc_shared_data.status = SWRMT_EXPERIMENT_READY;
+    ipc_shared_data.status = SWRMT_APPLICATION_READY;
 
     while (1) {
         __WFE();
@@ -336,8 +336,8 @@ void IPC_IRQHandler(void) {
         _bootloader_vars.ota_chunk_request = true;
     }
 
-    if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_EXPERIMENT_START]) {
-        NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_EXPERIMENT_START] = 0;
+    if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_APPLICATION_START]) {
+        NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_APPLICATION_START] = 0;
         _bootloader_vars.start_experiment = true;
     }
 }

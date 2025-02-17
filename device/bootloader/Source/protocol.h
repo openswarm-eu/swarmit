@@ -33,9 +33,10 @@ typedef struct __attribute__((packed)) {
 } swrmt_ota_chunk_pkt_t;
 
 typedef enum {
-    SWRMT_EXPERIMENT_READY,
-    SWRMT_EXPERIMENT_RUNNING,
-} swrmt_experiment_status_t;
+    SWRMT_APPLICATION_READY = 0,
+    SWRMT_APPLICATION_RUNNING,
+    SWRMT_APPLICATION_RESETTING,
+} swrmt_application_status_t;
 
 typedef enum {
     SWRMT_REQUEST_STATUS = 0x80,
