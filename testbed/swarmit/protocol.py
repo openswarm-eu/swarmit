@@ -12,23 +12,30 @@ class StatusType(Enum):
 
     Ready = 0
     Running = 1
-    Off = 2
+    Resetting = 2
 
 
 class SwarmitPayloadType(IntEnum):
     """Types of DotBot payload types."""
 
+    # Requests
     SWARMIT_REQUEST_STATUS = 0x80
     SWARMIT_REQUEST_START = 0x81
     SWARMIT_REQUEST_STOP = 0x82
     SWARMIT_REQUEST_OTA_START = 0x83
     SWARMIT_REQUEST_OTA_CHUNK = 0x84
-    SWARMIT_NOTIFICATION_STATUS = 0x85
-    SWARMIT_NOTIFICATION_OTA_START_ACK = 0x86
-    SWARMIT_NOTIFICATION_OTA_CHUNK_ACK = 0x87
-    SWARMIT_NOTIFICATION_EVENT_GPIO = 0x88
-    SWARMIT_NOTIFICATION_EVENT_LOG = 0x89
-    SWARMIT_MESSAGE = 0x8A
+
+    # Notifications
+    SWARMIT_NOTIFICATION_STATUS = 0x90
+    SWARMIT_NOTIFICATION_STARTED = 0x91
+    SWARMIT_NOTIFICATION_STOPPED = 0x92
+    SWARMIT_NOTIFICATION_OTA_START_ACK = 0x93
+    SWARMIT_NOTIFICATION_OTA_CHUNK_ACK = 0x94
+    SWARMIT_NOTIFICATION_EVENT_GPIO = 0x95
+    SWARMIT_NOTIFICATION_EVENT_LOG = 0x96
+
+    # Custom messages
+    SWARMIT_MESSAGE = 0xA0
 
 
 @dataclass
@@ -114,6 +121,32 @@ class PayloadStatusNotification(Packet):
 
     device_id: int = 0x0000000000000000
     status: StatusType = StatusType.Ready
+
+
+@dataclass
+class PayloadStartedNotification(Packet):
+    """Dataclass that holds an application started notification packet."""
+
+    metadata: list[PacketFieldMetadata] = dataclasses.field(
+        default_factory=lambda: [
+            PacketFieldMetadata(name="device_id", disp="id", length=8),
+        ]
+    )
+
+    device_id: int = 0x0000000000000000
+
+
+@dataclass
+class PayloadStoppedNotification(Packet):
+    """Dataclass that holds an application stopped notification packet."""
+
+    metadata: list[PacketFieldMetadata] = dataclasses.field(
+        default_factory=lambda: [
+            PacketFieldMetadata(name="device_id", disp="id", length=8),
+        ]
+    )
+
+    device_id: int = 0x0000000000000000
 
 
 @dataclass
@@ -207,6 +240,14 @@ def register_parsers():
     register_parser(
         SwarmitPayloadType.SWARMIT_NOTIFICATION_STATUS,
         PayloadStatusNotification,
+    )
+    register_parser(
+        SwarmitPayloadType.SWARMIT_NOTIFICATION_STARTED,
+        PayloadStartedNotification,
+    )
+    register_parser(
+        SwarmitPayloadType.SWARMIT_NOTIFICATION_STOPPED,
+        PayloadStoppedNotification,
     )
     register_parser(
         SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_START_ACK,

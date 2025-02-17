@@ -55,7 +55,7 @@ def main(ctx, port, baudrate, edge, devices):
     ctx.obj["port"] = port
     ctx.obj["baudrate"] = baudrate
     ctx.obj["edge"] = edge
-    ctx.obj["devices"] = [e[2:] for e in devices.split(",") if e]
+    ctx.obj["devices"] = [e for e in devices.split(",") if e]
 
 
 @main.command()
@@ -79,8 +79,17 @@ def start(ctx):
         console.print(f"[bold red]Error:[/] {exc}")
         return
     if controller.ready_devices:
-        controller.start()
-        print("Application started.")
+        started = controller.start()
+        if started and sorted(started) == sorted(controller.ready_devices):
+            print(
+                "Application started with success on "
+                f"[[bold cyan]{', '.join(sorted(started))}[/bold cyan]]"
+            )
+        else:
+            print(
+                f"Started: [{', '.join(sorted(started))}]\n"
+                f"Not started: [{', '.join(sorted(set(controller.ready_devices).difference(set(started))))}]"
+            )
     else:
         print("No ready devices")
     controller.terminate()
@@ -107,8 +116,17 @@ def stop(ctx):
         console.print(f"[bold red]Error:[/] {exc}")
         return
     if controller.running_devices:
-        controller.stop()
-        print("Application stopped.")
+        stopped = controller.stop()
+        if stopped and sorted(stopped) == sorted(controller.running_devices):
+            print(
+                "Application stopped with success on "
+                f"[[bold cyan]{', '.join(sorted(stopped))}[/bold cyan]]"
+            )
+        else:
+            print(
+                f"Stopped: [{', '.join(sorted(stopped))}]\n"
+                f"Not stopped: [{', '.join(sorted(set(controller.running_devices).difference(set(stopped))))}]"
+            )
     else:
         print("No running devices")
     controller.terminate()
@@ -150,7 +168,8 @@ def flash(ctx, yes, start, firmware):
         controller.terminate()
         return
     print(
-        f"Devices to flash ([bold white]{len(controller.ready_devices)}[/bold white]): [[magenta]{', '.join(controller.ready_devices)}[/magenta]]"
+        f"Devices to flash ([bold white]{len(controller.ready_devices)}"
+        f"[/bold white]): [[bold cyan]{', '.join(controller.ready_devices)}[/bold cyan]]"
     )
     print(f"Image size: [bold cyan]{len(fw)}B[/bold cyan]")
     print("")

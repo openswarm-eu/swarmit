@@ -74,8 +74,10 @@ class Controller:
         self.logger = LOGGER.bind(context=__name__)
         self.settings = settings
         self._interface: GatewayAdapterBase = None
-        self.chunks: list[DataChunk] = []
         self.status_data: dict[str, StatusType] = {}
+        self.started_data: list[str] = []
+        self.stopped_data: list[str] = []
+        self.chunks: list[DataChunk] = []
         self.start_ota_data: list[str] = []
         self.transfer_data: dict[str, TransferDataStatus] = {}
         self._known_devices: dict[str, StatusType] = {}
@@ -177,6 +179,22 @@ class Controller:
             )
         elif (
             frame.payload_type
+            == SwarmitPayloadType.SWARMIT_NOTIFICATION_STARTED
+            and self.expected_reply
+            == SwarmitPayloadType.SWARMIT_NOTIFICATION_STARTED
+        ):
+            if device_id not in self.started_data:
+                self.started_data.append(device_id)
+        elif (
+            frame.payload_type
+            == SwarmitPayloadType.SWARMIT_NOTIFICATION_STOPPED
+            and self.expected_reply
+            == SwarmitPayloadType.SWARMIT_NOTIFICATION_STOPPED
+        ):
+            if device_id not in self.stopped_data:
+                self.stopped_data.append(device_id)
+        elif (
+            frame.payload_type
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_START_ACK
             and self.expected_reply
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_START_ACK
@@ -255,19 +273,31 @@ class Controller:
                 live.update(self.status_table)
                 for device_id, status in sorted(self.status_data.items()):
                     self.status_table.add_row(
-                        f"0x{device_id}",
+                        f"{device_id}",
                         f'{"[bold cyan]" if status == StatusType.Running else "[bold green]"}{status.name}',
                     )
         self.expected_reply = None
         return self.status_data
 
     def _send_start(self, device_id: str):
+        def is_started():
+            if device_id == "0":
+                return sorted(self.started_data) == sorted(self.ready_devices)
+            else:
+                return device_id in self.started_data
+
+        self.expected_reply = SwarmitPayloadType.SWARMIT_NOTIFICATION_STARTED
         payload = PayloadStartRequest(device_id=int(device_id, base=16))
         self.send_frame(Frame(header=Header(), payload=payload))
-        time.sleep(0.01)
+        timeout = 0  # in seconds
+        while timeout < 3 and not is_started():
+            timeout += 0.001
+            time.sleep(0.001)
+        self.expected_reply = None
 
     def start(self):
         """Start the application."""
+        self.started_data = []
         ready_devices = self.ready_devices
         if not self.settings.devices:
             self._send_start("0")
@@ -276,14 +306,29 @@ class Controller:
                 if device_id not in ready_devices:
                     continue
                 self._send_start(device_id)
+        return self.started_data
 
     def _send_stop(self, device_id: str):
+        def is_stopped():
+            if device_id == "0":
+                return sorted(self.stopped_data) == sorted(
+                    self.running_devices
+                )
+            else:
+                return device_id in self.stopped_data
+
+        self.expected_reply = SwarmitPayloadType.SWARMIT_NOTIFICATION_STOPPED
         payload = PayloadStopRequest(device_id=int(device_id, base=16))
         self.send_frame(Frame(header=Header(), payload=payload))
-        time.sleep(0.01)
+        timeout = 0  # in seconds
+        while timeout < 10 and not is_stopped():
+            timeout += 0.001
+            time.sleep(0.001)
+        self.expected_reply = None
 
     def stop(self):
         """Stop the application."""
+        self.stopped_data = []
         running_devices = self.running_devices
         if not self.settings.devices:
             self._send_stop("0")
@@ -292,6 +337,7 @@ class Controller:
                 if device_id not in running_devices:
                     continue
                 self._send_stop(device_id)
+        return self.stopped_data
 
     def monitor(self):
         """Monitor the testbed."""
@@ -483,7 +529,7 @@ class Controller:
                     else ("[bold red]", "[/bold red]")
                 )
                 self.transfer_status_table.add_row(
-                    f"0x{device_id}",
+                    f"{device_id}",
                     f"{len(status.chunks_acked)}/{len(self.chunks)}",
                     f"{start_marker}{bool(status.hashes_match)}{stop_marker}",
                 )
