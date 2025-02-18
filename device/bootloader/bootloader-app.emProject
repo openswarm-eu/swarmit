@@ -1,0 +1,43 @@
+<!DOCTYPE CrossStudio_Project_File>
+<solution Name="Bootloader" target="8" version="2">
+  <project Name="Bootloader">
+    <configuration
+      Name="Common"
+      project_dependencies="00bsp_dotbot_lh2(bsp);00drv_move(drv);00bsp_timer_hf(bsp)"
+      project_directory=""
+      project_type="Executable" />
+    <configuration Name="Debug" use_compiler_driver="Yes" />
+    <configuration Name="Release" gcc_optimization_level="Level 2 balanced" />
+    <folder Name="Setup">
+      <file file_name="Setup/flash_placement.xml" />
+      <file file_name="Setup/MemoryMap.xml" />
+    </folder>
+    <folder Name="Source">
+      <file file_name="Source/cmse_implib.c" />
+      <file file_name="Source/cmse_implib.h" />
+      <file file_name="Source/device.h" />
+      <file file_name="Source/ipc.c" />
+      <file file_name="Source/ipc.h" />
+      <file file_name="Source/main.c" />
+      <file file_name="Source/nvmc.c" />
+      <file file_name="Source/nvmc.h" />
+      <file file_name="Source/protocol.c" />
+      <file file_name="Source/protocol.h" />
+      <file file_name="Source/radio.h" />
+      <file file_name="Source/rng.c" />
+      <file file_name="Source/rng.h" />
+      <file file_name="Source/tdma_client.c" />
+      <file file_name="Source/tdma_client.h" />
+      <file file_name="Source/tz.c" />
+      <file file_name="Source/tz.h" />
+    </folder>
+    <folder Name="System">
+      <file file_name="System/clock.c" />
+      <file file_name="System/clock.h" />
+      <file file_name="System/fault_handlers.c" />
+      <file file_name="System/fault_handlers.h" />
+      <file file_name="System/startup.c" />
+      <file file_name="System/system_init.c" />
+    </folder>
+  </project>
+</solution>
