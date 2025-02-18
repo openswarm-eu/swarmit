@@ -23,6 +23,7 @@ size_t protocol_header_to_buffer(uint8_t *buffer, uint64_t dst) {
         .dst         = dst,
         .src         = src,
     };
+
     memcpy(buffer, &header, sizeof(protocol_header_t));
     return sizeof(protocol_header_t);
 }

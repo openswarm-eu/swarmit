@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #include <arm_cmse.h>
 #include <nrf.h>
@@ -20,18 +21,45 @@
 #include "tdma_client.h"
 #include "tz.h"
 
-#define SWARMIT_BASE_ADDRESS    (0x00004000);
+// DotBot-firmware includes
+#include "board_config.h"
+#include "lh2.h"
+#include "move.h"
+#include "timer_hf.h"
+
+#define SWARMIT_BASE_ADDRESS    (0x8000)
 #define RADIO_FREQ              (8U)
+
+#define LH2_UPDATE_DELAY_US        (100000UL)   ///< 100ms delay between each LH2 data refresh
+#define ROBOT_REDUCE_SPEED_FACTOR  (0.7)  ///< Reduction factor applied to speed when close to target or error angle is too large
+#define ROBOT_REDUCE_SPEED_ANGLE   (25)   ///< Max angle amplitude where speed reduction factor is applied
+#define ROBOT_ANGULAR_SPEED_FACTOR (35)   ///< Constant applied to the normalized angle to target error
+#define ROBOT_ANGULAR_SIDE_FACTOR  (-1)   ///< Angular side factor
 
 extern volatile __attribute__((section(".shared_data"))) ipc_shared_data_t ipc_shared_data;
 
-typedef struct __attribute__((aligned(4))) {
-    uint8_t     notification_buffer[255];
+typedef struct {
+    uint8_t     notification_buffer[255]  __attribute__((aligned));
     uint32_t    base_addr;
     bool        ota_start_request;
     bool        ota_chunk_request;
-    bool        start_experiment;
+    bool        start_application;
+    //bool        reset_application;
+#if defined(USE_LH2)
+    db_lh2_t    lh2;
+    bool        lh2_location;
+    bool        lh2_update;
+#endif
 } bootloader_app_data_t;
+
+#if defined(USE_LH2)
+typedef struct {
+    int16_t current_angle;
+    bool refresh;
+} control_loop_data_t;
+
+static control_loop_data_t _control_loop_vars = { 0 };
+#endif
 
 static bootloader_app_data_t _bootloader_vars = { 0 };
 
@@ -101,7 +129,7 @@ static void setup_ns_user(void) {
     tz_configure_ram_non_secure(4, 48);
 
     // Configure Non Secure Callable subregion
-    NRF_SPU_S->FLASHNSC[0].REGION = 0;
+    NRF_SPU_S->FLASHNSC[0].REGION = 1;
     NRF_SPU_S->FLASHNSC[0].SIZE = 8;
 
     // Configure access to allows peripherals from non secure world
@@ -194,15 +222,107 @@ uint64_t _deviceid(void) {
     return ((uint64_t)NRF_FICR_S->INFO.DEVICEID[1]) << 32 | (uint64_t)NRF_FICR_S->INFO.DEVICEID[0];
 }
 
+#if defined(USE_LH2)
+static void _update_lh2(void) {
+    _bootloader_vars.lh2_update = true;
+}
+
+static void _process_lh2(void) {
+    if (_bootloader_vars.lh2.data_ready[0][0] == DB_LH2_PROCESSED_DATA_AVAILABLE && _bootloader_vars.lh2.data_ready[1][0] == DB_LH2_PROCESSED_DATA_AVAILABLE) {
+        db_lh2_stop();
+        // Prepare the radio buffer
+        size_t length = protocol_header_to_buffer(_bootloader_vars.notification_buffer, BROADCAST_ADDRESS);
+        _bootloader_vars.notification_buffer[length++] = PROTOCOL_DOTBOT_DATA;
+        memcpy(_bootloader_vars.notification_buffer + length, &_control_loop_vars.current_angle, sizeof(int16_t));
+        length += sizeof(int16_t);
+        _bootloader_vars.notification_buffer[length++] = LH2_SWEEP_COUNT;
+        // Add the LH2 sweep
+        for (uint8_t lh2_sweep_index = 0; lh2_sweep_index < LH2_SWEEP_COUNT; lh2_sweep_index++) {
+            memcpy(_bootloader_vars.notification_buffer + length, &_bootloader_vars.lh2.raw_data[lh2_sweep_index][0], sizeof(db_lh2_raw_data_t));
+            length += sizeof(db_lh2_raw_data_t);
+
+            // Mark the data as already sent
+            _bootloader_vars.lh2.data_ready[lh2_sweep_index][0] = DB_LH2_NO_NEW_DATA;
+        }
+
+        // Send the radio packet
+        tdma_client_tx(_bootloader_vars.notification_buffer, length);
+
+        db_lh2_start();
+    }
+    _bootloader_vars.lh2_update = false;
+}
+
+static void _compute_angle(const protocol_lh2_location_t *head, const protocol_lh2_location_t *tail, int16_t *angle) {
+    float dx = ((float)head->x - (float)tail->x) / 1e6;
+    float dy = ((float)head->y - (float)tail->y) / 1e6;
+    float distance = sqrtf(powf(dx, 2) + powf(dy, 2));
+
+    int8_t sideFactor = (dx > 0) ? -1 : 1;
+    *angle = (int16_t)(acosf(dy / distance) * 180 / M_PI) * sideFactor;
+    if (*angle < 0) {
+        *angle = 360 + *angle;
+    }
+}
+
+static void _update_control_loop(void) {
+    if (!_control_loop_vars.refresh) {
+        return;
+    }
+
+    // Move straight to compute the current angle
+    if (_control_loop_vars.current_angle == -1000) {
+        _control_loop_vars.refresh = false;
+        const protocol_lh2_location_t start_location = {
+            .x = ipc_shared_data.current_location.x,
+            .y = ipc_shared_data.current_location.y,
+        };
+        // Move straight over 10cm
+        db_move_straight(10, 50);
+
+        // Recompute angle
+        _compute_angle((const protocol_lh2_location_t *)&ipc_shared_data.current_location, &start_location, &_control_loop_vars.current_angle);
+        _control_loop_vars.refresh = true;
+        return;
+    }
+
+    // Compute angle to target and rotate
+    int16_t angle_to_target = 0;
+    _compute_angle((const protocol_lh2_location_t *)&ipc_shared_data.target_location, (const protocol_lh2_location_t *)&ipc_shared_data.current_location, &angle_to_target);
+    int16_t error_angle = angle_to_target - _control_loop_vars.current_angle;
+    if (error_angle != 0) {
+        _control_loop_vars.refresh = false;
+        // Rotate
+        db_move_rotate(error_angle, 45);
+
+        _control_loop_vars.refresh = true;
+        return;
+    }
+
+    // Compute distance and move straight if too far from target
+    float dx = ((float)ipc_shared_data.target_location.x - (float)ipc_shared_data.current_location.x) / 1e6;
+    float dy = ((float)ipc_shared_data.target_location.y - (float)ipc_shared_data.current_location.y) / 1e6;
+    float distanceToTarget = sqrtf(powf(dx, 2) + powf(dy, 2));
+    if ((uint32_t)(distanceToTarget * 1e6) > 20000) {
+        _control_loop_vars.refresh = false;
+        // Move straight
+        db_move_straight(10, 50);
+        _control_loop_vars.refresh = true;
+        return;
+    }
+
+    ipc_shared_data.status = SWRMT_APPLICATION_READY;
+}
+#endif
+
 int main(void) {
-    ipc_shared_data.status = SWRMT_APPLICATION_RESETTING;
 
     setup_watchdog1();
 
-    // First flash region (16kiB) is secure and contains the bootloader
-    tz_configure_flash_secure(0, 1);
+    // First 2 flash regions (32kiB) is secure and contains the bootloader
+    tz_configure_flash_secure(0, 2);
     // Configure non secure flash address space
-    tz_configure_flash_non_secure(1, 63);
+    tz_configure_flash_non_secure(2, 62);
 
     // Management code
     // Application mutex must be non secure because it's shared with the network which is itself non secure
@@ -211,14 +331,23 @@ int main(void) {
     tz_configure_ram_non_secure(3, 1);
 
     // Configure IPC interrupts and channels used to interact with the network core.
-    NRF_IPC_S->INTENSET                                 = (1 << IPC_CHAN_RADIO_RX | 1 << IPC_CHAN_OTA_START | 1 << IPC_CHAN_OTA_CHUNK | 1 << IPC_CHAN_APPLICATION_START);
+    NRF_IPC_S->INTENSET = (
+                            1 << IPC_CHAN_RADIO_RX |
+                            1 << IPC_CHAN_OTA_START |
+                            1 << IPC_CHAN_OTA_CHUNK |
+                            1 << IPC_CHAN_APPLICATION_START |
+                            //1 << IPC_CHAN_APPLICATION_RESET |
+                            1 << IPC_CHAN_LH2_LOCATION
+                        );
     NRF_IPC_S->SEND_CNF[IPC_CHAN_REQ]                   = 1 << IPC_CHAN_REQ;
     NRF_IPC_S->SEND_CNF[IPC_CHAN_LOG_EVENT]             = 1 << IPC_CHAN_LOG_EVENT;
     NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_RADIO_RX]           = 1 << IPC_CHAN_RADIO_RX;
     NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_APPLICATION_START]  = 1 << IPC_CHAN_APPLICATION_START;
     NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_APPLICATION_STOP]   = 1 << IPC_CHAN_APPLICATION_STOP;
+    //NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_APPLICATION_RESET]  = 1 << IPC_CHAN_APPLICATION_RESET;
     NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_OTA_START]          = 1 << IPC_CHAN_OTA_START;
     NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_OTA_CHUNK]          = 1 << IPC_CHAN_OTA_CHUNK;
+    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_LH2_LOCATION]       = 1 << IPC_CHAN_LH2_LOCATION;
     NVIC_EnableIRQ(IPC_IRQn);
     NVIC_ClearPendingIRQ(IPC_IRQn);
     NVIC_SetPriority(IPC_IRQn, IPC_IRQ_PRIORITY);
@@ -288,6 +417,20 @@ int main(void) {
 
     _bootloader_vars.base_addr = SWARMIT_BASE_ADDRESS;
 
+#if defined(USE_LH2)
+    // Initialize current angle to invalid value to force a recomputation when reset is called
+    _control_loop_vars.current_angle = -1000;
+
+    // PWM, Motors and move library initialization
+    db_move_init();
+
+    // Periodic Timer and Lighthouse initialization
+    db_timer_hf_init(0);
+    db_timer_hf_set_periodic_us(0, 1, LH2_UPDATE_DELAY_US, &_update_lh2);
+    db_lh2_init(&_bootloader_vars.lh2, &db_lh2_d, &db_lh2_e);
+    db_lh2_start();
+#endif
+
     // Experiment is ready
     ipc_shared_data.status = SWRMT_APPLICATION_READY;
 
@@ -302,8 +445,8 @@ int main(void) {
             printf("Pages to erase: %u\n", pages_count);
             for (uint32_t page = 0; page < pages_count; page++) {
                 uint32_t addr = _bootloader_vars.base_addr + page * FLASH_PAGE_SIZE;
-                printf("Erasing page %u at %p\n", page + 4, (uint32_t *)addr);
-                nvmc_page_erase(page + 4);
+                printf("Erasing page %u at %p\n", page + 8, (uint32_t *)addr);
+                nvmc_page_erase(page + 8);
             }
             printf("Erasing done\n");
 
@@ -336,9 +479,20 @@ int main(void) {
             tdma_client_tx(_bootloader_vars.notification_buffer, length);
         }
 
-        if (_bootloader_vars.start_experiment) {
+        if (_bootloader_vars.start_application) {
             NVIC_SystemReset();
         }
+
+#if defined(USE_LH2)
+        if (_bootloader_vars.lh2_update) {
+            // Copy LH2 code from dotbot application
+            _process_lh2();
+        }
+
+        if (_bootloader_vars.lh2_location && ipc_shared_data.status == SWRMT_APPLICATION_RESETTING) {
+            _update_control_loop();
+        }
+#endif
     }
 }
 
@@ -358,6 +512,18 @@ void IPC_IRQHandler(void) {
 
     if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_APPLICATION_START]) {
         NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_APPLICATION_START] = 0;
-        _bootloader_vars.start_experiment = true;
+        _bootloader_vars.start_application = true;
     }
+
+    //if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_APPLICATION_RESET]) {
+    //    NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_APPLICATION_RESET] = 0;
+    //    _bootloader_vars.reset_application = true;
+    //}
+
+#if defined(USE_LH2)
+    if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_LH2_LOCATION]) {
+        NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_LH2_LOCATION] = 0;
+        _bootloader_vars.lh2_location = true;
+    }
+#endif
 }

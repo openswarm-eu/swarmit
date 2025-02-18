@@ -11,7 +11,8 @@
 #include "protocol.h"
 #include "rng.h"
 
-static uint8_t _tx_data_buffer[255];
+static __attribute__((aligned(8))) uint8_t _tx_data_buffer[UINT8_MAX];
+
 extern volatile __attribute__((section(".shared_data"))) ipc_shared_data_t ipc_shared_data;
 
 __attribute__((cmse_nonsecure_entry)) void swarmit_reload_wdt0(void) {
