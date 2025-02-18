@@ -9,7 +9,11 @@ from dotbot.serial_interface import SerialInterfaceException, get_default_port
 from rich import print
 from rich.console import Console
 
-from testbed.swarmit.controller import Controller, ControllerSettings
+from testbed.swarmit.controller import (
+    Controller,
+    ControllerSettings,
+    ResetLocation,
+)
 
 SERIAL_PORT_DEFAULT = get_default_port()
 BAUDRATE_DEFAULT = 1000000
@@ -91,7 +95,7 @@ def start(ctx):
                 f"Not started: [{', '.join(sorted(set(controller.ready_devices).difference(set(started))))}]"
             )
     else:
-        print("No ready devices")
+        print("No device to start")
     controller.terminate()
 
 
@@ -115,9 +119,11 @@ def stop(ctx):
         console = Console()
         console.print(f"[bold red]Error:[/] {exc}")
         return
-    if controller.running_devices:
+    if controller.running_devices or controller.resetting_devices:
         stopped = controller.stop()
-        if stopped and sorted(stopped) == sorted(controller.running_devices):
+        if stopped and sorted(stopped) == sorted(
+            controller.running_devices + controller.resetting_devices
+        ):
             print(
                 "Application stopped with success on "
                 f"[[bold cyan]{', '.join(sorted(stopped))}[/bold cyan]]"
@@ -125,10 +131,59 @@ def stop(ctx):
         else:
             print(
                 f"Stopped: [{', '.join(sorted(stopped))}]\n"
-                f"Not stopped: [{', '.join(sorted(set(controller.running_devices).difference(set(stopped))))}]"
+                f"Not stopped: [{', '.join(sorted(set(controller.running_devices + controller.resetting_devices).difference(set(stopped))))}]"
             )
     else:
-        print("No running devices")
+        print("No device to stop")
+    controller.terminate()
+
+
+@main.command()
+@click.argument(
+    "locations",
+    type=str,
+)
+@click.pass_context
+def reset(ctx, locations):
+    """Reset device locations
+
+    Locations are provided as '<device_id>:<x>,<y>-<device_id>:<x>,<y>|...'
+    """
+    devices = ctx.obj["devices"]
+    if not devices:
+        print("No devices selected.")
+        return
+    locations = {
+        location.split(':')[0]: ResetLocation(
+            pos_x=int(location.split(':')[1].split(',')[0]),
+            pos_y=int(location.split(':')[1].split(',')[1]),
+        )
+        for location in locations.split("-")
+    }
+    if sorted(devices) and sorted(locations.keys()) != sorted(devices):
+        print("Selected devices and reset locations do not match.")
+        return
+    try:
+        settings = ControllerSettings(
+            serial_port=ctx.obj["port"],
+            serial_baudrate=ctx.obj["baudrate"],
+            mqtt_host="argus.paris.inria.fr",
+            mqtt_port=8883,
+            edge=ctx.obj["edge"],
+            devices=list(ctx.obj["devices"]),
+        )
+        controller = Controller(settings)
+    except (
+        SerialInterfaceException,
+        serial.serialutil.SerialException,
+    ) as exc:
+        console = Console()
+        console.print(f"[bold red]Error:[/] {exc}")
+        return
+    if not controller.ready_devices:
+        print("No device to reset.")
+        return
+    controller.reset(locations)
     controller.terminate()
 
 

@@ -25,6 +25,7 @@ from testbed.swarmit.protocol import (
     PayloadMessage,
     PayloadOTAChunkRequest,
     PayloadOTAStartRequest,
+    PayloadResetRequest,
     PayloadStartRequest,
     PayloadStatusRequest,
     PayloadStopRequest,
@@ -53,6 +54,17 @@ class TransferDataStatus:
     retries: list[int] = dataclasses.field(default_factory=lambda: [])
     chunks_acked: list[int] = dataclasses.field(default_factory=lambda: [])
     hashes_match: bool = False
+
+
+@dataclass
+class ResetLocation:
+    """Class that holds reset location."""
+
+    pos_x: int = 0
+    pos_y: int = 0
+
+    def __repr__(self):
+        return f"(x={self.pos_x}, y={self.pos_y})"
 
 
 @dataclass
@@ -130,6 +142,21 @@ class Controller:
             for device_id, status in self.known_devices.items()
             if (
                 status == StatusType.Running
+                and (
+                    not self.settings.devices
+                    or device_id in self.settings.devices
+                )
+            )
+        ]
+
+    @property
+    def resetting_devices(self) -> list[str]:
+        """Return the resetting devices."""
+        return [
+            device_id
+            for device_id, status in self.known_devices.items()
+            if (
+                status == StatusType.Resetting
                 and (
                     not self.settings.devices
                     or device_id in self.settings.devices
@@ -309,11 +336,11 @@ class Controller:
         return self.started_data
 
     def _send_stop(self, device_id: str):
+        stoppable_devices = self.running_devices + self.resetting_devices
+
         def is_stopped():
             if device_id == "0":
-                return sorted(self.stopped_data) == sorted(
-                    self.running_devices
-                )
+                return sorted(self.stopped_data) == sorted(stoppable_devices)
             else:
                 return device_id in self.stopped_data
 
@@ -329,15 +356,34 @@ class Controller:
     def stop(self):
         """Stop the application."""
         self.stopped_data = []
-        running_devices = self.running_devices
+        stoppable_devices = self.running_devices + self.resetting_devices
         if not self.settings.devices:
             self._send_stop("0")
         else:
             for device_id in self.settings.devices:
-                if device_id not in running_devices:
+                if device_id not in stoppable_devices:
                     continue
                 self._send_stop(device_id)
         return self.stopped_data
+
+    def _send_reset(self, device_id: str, location: ResetLocation):
+        payload = PayloadResetRequest(
+            device_id=int(device_id, base=16),
+            pos_x=location.pos_x,
+            pos_y=location.pos_y,
+        )
+        self.send_frame(Frame(header=Header(), payload=payload))
+
+    def reset(self, locations: dict[str, ResetLocation]):
+        """Reset the application."""
+        ready_devices = self.ready_devices
+        for device_id in self.settings.devices:
+            if device_id not in ready_devices:
+                continue
+            print(
+                f"Resetting device {device_id} with location {locations[device_id]}"
+            )
+            self._send_reset(device_id, locations[device_id])
 
     def monitor(self):
         """Monitor the testbed."""

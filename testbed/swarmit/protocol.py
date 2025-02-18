@@ -4,7 +4,11 @@ import dataclasses
 from dataclasses import dataclass
 from enum import Enum, IntEnum
 
-from dotbot.protocol import Packet, PacketFieldMetadata, register_parser
+from dotbot.protocol import (
+    Packet,
+    PacketFieldMetadata,
+    register_parser,
+)
 
 
 class StatusType(Enum):
@@ -12,7 +16,8 @@ class StatusType(Enum):
 
     Ready = 0
     Running = 1
-    Resetting = 2
+    Stopping = 2
+    Resetting = 3
 
 
 class SwarmitPayloadType(IntEnum):
@@ -22,8 +27,9 @@ class SwarmitPayloadType(IntEnum):
     SWARMIT_REQUEST_STATUS = 0x80
     SWARMIT_REQUEST_START = 0x81
     SWARMIT_REQUEST_STOP = 0x82
-    SWARMIT_REQUEST_OTA_START = 0x83
-    SWARMIT_REQUEST_OTA_CHUNK = 0x84
+    SWARMIT_REQUEST_RESET = 0x83
+    SWARMIT_REQUEST_OTA_START = 0x84
+    SWARMIT_REQUEST_OTA_CHUNK = 0x85
 
     # Notifications
     SWARMIT_NOTIFICATION_STATUS = 0x90
@@ -36,6 +42,9 @@ class SwarmitPayloadType(IntEnum):
 
     # Custom messages
     SWARMIT_MESSAGE = 0xA0
+
+
+# Requests
 
 
 @dataclass
@@ -64,6 +73,23 @@ class PayloadStartRequest(PayloadRequest):
 @dataclass
 class PayloadStopRequest(PayloadRequest):
     """Dataclass that holds an application stop request packet."""
+
+
+@dataclass
+class PayloadResetRequest(Packet):
+    """Dataclass that holds an application reset request packet."""
+
+    metadata: list[PacketFieldMetadata] = dataclasses.field(
+        default_factory=lambda: [
+            PacketFieldMetadata(name="device_id", disp="id", length=8),
+            PacketFieldMetadata(name="pos_x", length=4),
+            PacketFieldMetadata(name="pos_y", length=4),
+        ]
+    )
+
+    device_id: int = 0
+    pos_x: int = 0
+    pos_y: int = 0
 
 
 @dataclass
@@ -106,6 +132,9 @@ class PayloadOTAChunkRequest(Packet):
     index: int = 0
     count: int = 0
     chunk: bytes = dataclasses.field(default_factory=lambda: bytearray)
+
+
+# Notifications
 
 
 @dataclass
@@ -230,6 +259,9 @@ def register_parsers():
     )
     register_parser(
         SwarmitPayloadType.SWARMIT_REQUEST_STOP, PayloadStopRequest
+    )
+    register_parser(
+        SwarmitPayloadType.SWARMIT_REQUEST_RESET, PayloadResetRequest
     )
     register_parser(
         SwarmitPayloadType.SWARMIT_REQUEST_OTA_START, PayloadOTAStartRequest
