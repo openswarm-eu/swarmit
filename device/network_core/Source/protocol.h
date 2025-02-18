@@ -15,6 +15,7 @@
 typedef enum {
     SWRMT_APPLICATION_READY = 0,
     SWRMT_APPLICATION_RUNNING,
+    SWRMT_APPLICATION_STOPPING,
     SWRMT_APPLICATION_RESETTING,
 } swrmt_application_status_t;
 
@@ -22,8 +23,9 @@ typedef enum {
     SWRMT_REQUEST_STATUS = 0x80,
     SWRMT_REQUEST_START = 0x81,
     SWRMT_REQUEST_STOP = 0x82,
-    SWRMT_REQUEST_OTA_START = 0x83,
-    SWRMT_REQUEST_OTA_CHUNK = 0x84,
+    SWRMT_REQUEST_RESET = 0x83,
+    SWRMT_REQUEST_OTA_START = 0x84,
+    SWRMT_REQUEST_OTA_CHUNK = 0x85,
 } swrmt_request_type_t;
 
 typedef enum {
@@ -47,6 +49,14 @@ typedef enum {
     PACKET_TDMA_SYNC_FRAME   = 7,  ///< TDMA sync frame packet
     PACKET_TDMA_KEEP_ALIVE   = 8,  ///< TDMA keep alive packet
 } packet_type_t;
+
+/// DotBot protocol data type (just the LH related ones)
+typedef enum {
+    PROTOCOL_LH2_RAW_DATA       = 2,   ///< Lighthouse 2 raw data
+    PROTOCOL_LH2_LOCATION       = 3,   ///< Lighthouse processed locations
+    PROTOCOL_DOTBOT_DATA        = 6,   ///< DotBot specific data (for now location and direction)
+    PROTOCOL_LH2_PROCESSED_DATA = 12,  ///< Lighthouse 2 data processed at the DotBot
+} protocol_data_type_t;
 
 /// DotBot protocol header
 typedef struct __attribute__((packed)) {
@@ -99,6 +109,12 @@ typedef struct __attribute__((packed)) {
 typedef struct __attribute__((packed)) {
     uint32_t frame_period;  ///< duration of a full TDMA frame
 } protocol_sync_frame_t;
+
+/// DotBot protocol LH2 computed location
+typedef struct __attribute__((packed)) {
+    uint32_t x;  ///< X coordinate, multiplied by 1e6
+    uint32_t y;  ///< Y coordinate, multiplied by 1e6
+} protocol_lh2_location_t;
 
 /**
  * @brief   Write the protocol header in a buffer

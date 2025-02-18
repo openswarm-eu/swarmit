@@ -16,6 +16,7 @@
 #include <nrf.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include "protocol.h"
 #include "radio.h"
 #include "tdma_client.h"
 
@@ -39,11 +40,13 @@ typedef enum {
 typedef enum {
     IPC_CHAN_REQ                = 0,    ///< Channel used for request events
     IPC_CHAN_RADIO_RX           = 1,    ///< Channel used for radio RX events
-    IPC_CHAN_APPLICATION_START  = 2,    ///< Channel used for starting the experiment
-    IPC_CHAN_APPLICATION_STOP   = 3,    ///< Channel used for stopping the experiment
-    IPC_CHAN_LOG_EVENT          = 4,    ///< Channel used for logging events
-    IPC_CHAN_OTA_START          = 5,    ///< Channel used for starting an OTA process
-    IPC_CHAN_OTA_CHUNK          = 6,    ///< Channel used for writing a non secure image chunk
+    IPC_CHAN_APPLICATION_START  = 2,    ///< Channel used for starting the application
+    IPC_CHAN_APPLICATION_STOP   = 3,    ///< Channel used for stopping the application
+    IPC_CHAN_APPLICATION_RESET  = 4,    ///< Channel used for resetting the application
+    IPC_CHAN_LOG_EVENT          = 5,    ///< Channel used for logging events
+    IPC_CHAN_OTA_START          = 6,    ///< Channel used for starting an OTA process
+    IPC_CHAN_OTA_CHUNK          = 7,    ///< Channel used for writing a non secure image chunk
+    IPC_CHAN_LH2_LOCATION       = 8,    ///< Channel used to notify of a new location received
 } ipc_channels_t;
 
 typedef struct {
@@ -80,15 +83,17 @@ typedef struct __attribute__((packed)) {
 } ipc_tdma_client_data_t;
 
 typedef struct __attribute__((packed)) {
-    bool                   net_ready;   ///< Network core is ready
-    bool                   net_ack;     ///< Network core acked the latest request
-    ipc_req_t              req;         ///< IPC network request
-    uint8_t                status;      ///< Experiment status
-    ipc_log_data_t         log;         ///< Log data
-    ipc_rng_data_t         rng;         ///< Rng shared data
-    ipc_ota_data_t         ota;         ///< OTA data
-    ipc_tdma_client_data_t tdma_client; ///< TDMA client drv shared data
-    ipc_radio_pdu_t        data_pdu;    ///< User data pdu
+    bool                    net_ready;          ///< Network core is ready
+    bool                    net_ack;            ///< Network core acked the latest request
+    ipc_req_t               req;                ///< IPC network request
+    uint8_t                 status;             ///< Experiment status
+    ipc_log_data_t          log;                ///< Log data
+    ipc_rng_data_t          rng;                ///< Rng shared data
+    ipc_ota_data_t          ota;                ///< OTA data
+    protocol_lh2_location_t current_location;   ///< LH2 current location
+    protocol_lh2_location_t target_location;    ///< LH2 target location
+    ipc_tdma_client_data_t  tdma_client;        ///< TDMA client drv shared data
+    ipc_radio_pdu_t         data_pdu;           ///< User data pdu
 } ipc_shared_data_t;
 
 /**
