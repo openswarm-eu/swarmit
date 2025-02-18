@@ -1,0 +1,3 @@
+[submodule "dotbot-firmware"]
+	path = dotbot-firmware
+	url = https://github.com/DotBots/dotbot-firmware
