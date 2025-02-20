@@ -6,8 +6,7 @@
       project_dependencies="00bsp_dotbot_lh2(bsp);00drv_move(drv);00bsp_timer_hf(bsp)"
       project_directory=""
       project_type="Executable" />
-    <configuration Name="Debug" use_compiler_driver="Yes" />
-    <configuration Name="Release" gcc_optimization_level="Level 2 balanced" />
+    <configuration Name="Release" gcc_optimization_level="Level 0" />
     <folder Name="Setup">
       <file file_name="Setup/flash_placement.xml" />
       <file file_name="Setup/MemoryMap.xml" />
