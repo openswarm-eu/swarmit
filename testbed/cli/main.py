@@ -37,7 +37,7 @@ BAUDRATE_DEFAULT = 1000000
     "--edge",
     is_flag=True,
     default=False,
-    help="Use MQTT adapter to communicate with the edge gateway.",
+    help="Use MQTT adapter to communicate with an edge gateway.",
 )
 @click.option(
     "-d",
@@ -65,6 +65,7 @@ def main(ctx, port, baudrate, edge, devices):
 @main.command()
 @click.pass_context
 def start(ctx):
+    """Start the user application."""
     try:
         settings = ControllerSettings(
             serial_port=ctx.obj["port"],
@@ -102,6 +103,7 @@ def start(ctx):
 @main.command()
 @click.pass_context
 def stop(ctx):
+    """Stop the user application."""
     try:
         settings = ControllerSettings(
             serial_port=ctx.obj["port"],
@@ -145,7 +147,7 @@ def stop(ctx):
 )
 @click.pass_context
 def reset(ctx, locations):
-    """Reset device locations
+    """Reset robots locations.
 
     Locations are provided as '<device_id>:<x>,<y>-<device_id>:<x>,<y>|...'
     """
@@ -203,6 +205,7 @@ def reset(ctx, locations):
 @click.argument("firmware", type=click.File(mode="rb"), required=False)
 @click.pass_context
 def flash(ctx, yes, start, firmware):
+    """Flash a firmware to the robots."""
     console = Console()
     if firmware is None:
         console.print("[bold red]Error:[/] Missing firmware file. Exiting.")
@@ -260,6 +263,7 @@ def flash(ctx, yes, start, firmware):
 @main.command()
 @click.pass_context
 def monitor(ctx):
+    """Monitor running applications."""
     try:
         settings = ControllerSettings(
             serial_port=ctx.obj["port"],
@@ -288,6 +292,7 @@ def monitor(ctx):
 @main.command()
 @click.pass_context
 def status(ctx):
+    """Print current status of the robots."""
     settings = ControllerSettings(
         serial_port=ctx.obj["port"],
         serial_baudrate=ctx.obj["baudrate"],
@@ -306,6 +311,7 @@ def status(ctx):
 @click.argument("message", type=str, required=True)
 @click.pass_context
 def message(ctx, message):
+    """Send a custom text message to the robots."""
     settings = ControllerSettings(
         serial_port=ctx.obj["port"],
         serial_baudrate=ctx.obj["baudrate"],

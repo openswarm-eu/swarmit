@@ -14,7 +14,7 @@ from dotbot.protocol import (
 class StatusType(Enum):
     """Types of device status."""
 
-    Ready = 0
+    Bootloader = 0
     Running = 1
     Stopping = 2
     Resetting = 3
@@ -149,7 +149,7 @@ class PayloadStatusNotification(Packet):
     )
 
     device_id: int = 0x0000000000000000
-    status: StatusType = StatusType.Ready
+    status: StatusType = StatusType.Bootloader
 
 
 @dataclass

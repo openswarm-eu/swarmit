@@ -171,7 +171,7 @@ class Controller:
             device_id
             for device_id, status in self.known_devices.items()
             if (
-                status == StatusType.Ready
+                status == StatusType.Bootloader
                 and (
                     not self.settings.devices
                     or device_id in self.settings.devices
