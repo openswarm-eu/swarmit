@@ -4,11 +4,7 @@ import dataclasses
 from dataclasses import dataclass
 from enum import Enum, IntEnum
 
-from dotbot.protocol import (
-    Packet,
-    PacketFieldMetadata,
-    register_parser,
-)
+from dotbot.protocol import Packet, PacketFieldMetadata, register_parser
 
 
 class StatusType(Enum):

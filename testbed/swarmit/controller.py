@@ -48,6 +48,15 @@ class DataChunk:
 
 
 @dataclass
+class StartOtaData:
+    """Class that holds start ota data."""
+
+    chunks: int = 0
+    fw_hash: bytes = b""
+    ids: list[str] = dataclasses.field(default_factory=lambda: [])
+
+
+@dataclass
 class TransferDataStatus:
     """Class that holds transfer data status for a single device."""
 
@@ -65,6 +74,100 @@ class ResetLocation:
 
     def __repr__(self):
         return f"(x={self.pos_x}, y={self.pos_y})"
+
+
+def print_status(status_data: dict[str, StatusType]) -> None:
+    """Print the status of the devices."""
+    print()
+    print(
+        f"{len(status_data)} device{'s' if len(status_data) > 1 else ''} found"
+    )
+    print()
+    status_table = Table()
+    status_table.add_column("Device ID", style="magenta", no_wrap=True)
+    status_table.add_column("Status", style="green", justify="center")
+    with Live(status_table, refresh_per_second=4) as live:
+        live.update(status_table)
+        for device_id, status in sorted(status_data.items()):
+            status_table.add_row(
+                f"{device_id}",
+                f'{"[bold cyan]" if status == StatusType.Running else "[bold green]"}{status.name}',
+            )
+
+
+def print_start_status(
+    stopped_data: list[str], not_started: list[str]
+) -> None:
+    """Print the start status."""
+    print("[bold]Start status:[/]")
+    status_table = Table()
+    status_table.add_column("Device ID", style="magenta", no_wrap=True)
+    status_table.add_column("Status", style="green", justify="center")
+    with Live(status_table, refresh_per_second=4) as live:
+        live.update(status_table)
+        for device_id in sorted(stopped_data):
+            status_table.add_row(
+                f"{device_id}", "[bold green]:heavy_check_mark:[/]"
+            )
+        for device_id in sorted(not_started):
+            status_table.add_row(f"{device_id}", "[bold red]:x:[/]")
+
+
+def print_stop_status(stopped_data: list[str], not_stopped: list[str]) -> None:
+    """Print the stop status."""
+    print("[bold]Stop status:[/]")
+    status_table = Table()
+    status_table.add_column("Device ID", style="magenta", no_wrap=True)
+    status_table.add_column("Status", style="green", justify="center")
+    with Live(status_table, refresh_per_second=4) as live:
+        live.update(status_table)
+        for device_id in sorted(stopped_data):
+            status_table.add_row(
+                f"{device_id}", "[bold green]:heavy_check_mark:[/]"
+            )
+        for device_id in sorted(not_stopped):
+            status_table.add_row(f"{device_id}", "[bold red]No[/]")
+
+
+def print_transfer_status(
+    status: dict[str, TransferDataStatus], start_data: int
+) -> None:
+    """Print the transfer status."""
+    print()
+    print("[bold]Transfer status:[/]")
+    transfer_status_table = Table()
+    transfer_status_table.add_column(
+        "Device ID", style="magenta", no_wrap=True
+    )
+    transfer_status_table.add_column(
+        "Chunks acked", style="green", justify="center"
+    )
+    transfer_status_table.add_column(
+        "Hashes match", style="green", justify="center"
+    )
+    with Live(transfer_status_table, refresh_per_second=4) as live:
+        live.update(transfer_status_table)
+        for device_id, status in sorted(status.items()):
+            start_marker, stop_marker = (
+                ("[bold green]", "[/]")
+                if bool(status.hashes_match) is True
+                else ("[bold red]", "[/]")
+            )
+            transfer_status_table.add_row(
+                f"{device_id}",
+                f"{len(status.chunks_acked)}/{start_data.chunks}",
+                f"{start_marker}{bool(status.hashes_match)}{stop_marker}",
+            )
+
+
+def wait_for_done(timeout, condition_func):
+    """Wait for the condition to be met."""
+    while timeout > 0:
+        if condition_func():
+            return True
+        timeout -= 0.01
+        time.sleep(0.01)
+    return False
 
 
 @dataclass
@@ -90,24 +193,9 @@ class Controller:
         self.started_data: list[str] = []
         self.stopped_data: list[str] = []
         self.chunks: list[DataChunk] = []
-        self.start_ota_data: list[str] = []
+        self.start_ota_data: StartOtaData = StartOtaData()
         self.transfer_data: dict[str, TransferDataStatus] = {}
         self._known_devices: dict[str, StatusType] = {}
-        self.status_table = Table()
-        self.status_table.add_column(
-            "Device ID", style="magenta", no_wrap=True
-        )
-        self.status_table.add_column("Status", style="green", justify="center")
-        self.transfer_status_table = Table()
-        self.transfer_status_table.add_column(
-            "Device ID", style="magenta", no_wrap=True
-        )
-        self.transfer_status_table.add_column(
-            "Chunks acked", style="green", justify="center"
-        )
-        self.transfer_status_table.add_column(
-            "Hashes match", style="green", justify="center"
-        )
         self.expected_reply: Optional[SwarmitPayloadType] = None
         register_parsers()
         if self.settings.edge is True:
@@ -131,7 +219,7 @@ class Controller:
     def known_devices(self) -> dict[str, StatusType]:
         """Return the known devices."""
         if not self._known_devices:
-            self._known_devices = self.status(display=False)
+            self._known_devices = self.status()
         return self._known_devices
 
     @property
@@ -194,6 +282,8 @@ class Controller:
 
     def on_data_received(self, data):
         frame = Frame().from_bytes(data)
+        if frame.payload_type < SwarmitPayloadType.SWARMIT_REQUEST_STATUS:
+            return
         device_id = f"{frame.payload.device_id:08X}"
         if (
             frame.payload_type
@@ -226,8 +316,8 @@ class Controller:
             and self.expected_reply
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_START_ACK
         ):
-            if device_id not in self.start_ota_data:
-                self.start_ota_data.append(device_id)
+            if device_id not in self.start_ota_data.ids:
+                self.start_ota_data.ids.append(device_id)
         elif (
             frame.payload_type
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_CHUNK_ACK
@@ -279,31 +369,14 @@ class Controller:
                 "Unknown payload type", payload_type=frame.payload_type
             )
 
-    def status(self, display=True):
+    def status(self):
         """Request the status of the testbed."""
         self.status_data: dict[str, StatusType] = {}
         payload = PayloadStatusRequest(device_id=0)
         frame = Frame(header=Header(), payload=payload)
         self.expected_reply = SwarmitPayloadType.SWARMIT_NOTIFICATION_STATUS
         self.send_frame(frame)
-        timeout = 0  # ms
-        while timeout < 2000:
-            timeout += 1
-            time.sleep(0.0001)
-        if self.status_data and display is True:
-            print()
-            print(
-                f"{len(self.status_data)} device{'s' if len(self.status_data) > 1 else ''} found"
-            )
-            print()
-            with Live(self.status_table, refresh_per_second=4) as live:
-                live.update(self.status_table)
-                for device_id, status in sorted(self.status_data.items()):
-                    self.status_table.add_row(
-                        f"{device_id}",
-                        f'{"[bold cyan]" if status == StatusType.Running else "[bold green]"}{status.name}',
-                    )
-        self.expected_reply = None
+        wait_for_done(1, lambda: False)
         return self.status_data
 
     def _send_start(self, device_id: str):
@@ -316,10 +389,7 @@ class Controller:
         self.expected_reply = SwarmitPayloadType.SWARMIT_NOTIFICATION_STARTED
         payload = PayloadStartRequest(device_id=int(device_id, base=16))
         self.send_frame(Frame(header=Header(), payload=payload))
-        timeout = 0  # in seconds
-        while timeout < 3 and not is_started():
-            timeout += 0.001
-            time.sleep(0.001)
+        wait_for_done(3, is_started)
         self.expected_reply = None
 
     def start(self):
@@ -347,10 +417,7 @@ class Controller:
         self.expected_reply = SwarmitPayloadType.SWARMIT_NOTIFICATION_STOPPED
         payload = PayloadStopRequest(device_id=int(device_id, base=16))
         self.send_frame(Frame(header=Header(), payload=payload))
-        timeout = 0  # in seconds
-        while timeout < 10 and not is_stopped():
-            timeout += 0.001
-            time.sleep(0.001)
+        wait_for_done(3, is_stopped)
         self.expected_reply = None
 
     def stop(self):
@@ -415,11 +482,11 @@ class Controller:
 
         def is_start_ota_acknowledged():
             if device_id == "0":
-                return sorted(self.start_ota_data) == sorted(
+                return sorted(self.start_ota_data.ids) == sorted(
                     self.ready_devices
                 )
             else:
-                return device_id in self.start_ota_data
+                return device_id in self.start_ota_data.ids
 
         payload = PayloadOTAStartRequest(
             device_id=int(device_id, base=16),
@@ -428,13 +495,11 @@ class Controller:
             fw_hash=self.fw_hash,
         )
         self.send_frame(Frame(header=Header(), payload=payload))
-        timeout = 0  # in seconds
-        while timeout < 3 and not is_start_ota_acknowledged():
-            timeout += 0.001
-            time.sleep(0.001)
+        wait_for_done(3, is_start_ota_acknowledged)
 
-    def start_ota(self, firmware):
+    def start_ota(self, firmware) -> StartOtaData:
         """Start the OTA process."""
+        self.start_ota_data = StartOtaData()
         self.chunks = []
         digest = hashes.Hash(hashes.SHA256())
         chunks_count = int(len(firmware) / CHUNK_SIZE) + int(
@@ -456,12 +521,12 @@ class Controller:
                     data=data,
                 )
             )
-        print(f"Radio chunks ([bold]{CHUNK_SIZE}B[/bold]): {len(self.chunks)}")
         self.fw_hash = digest.finalize()
         self.expected_reply = (
             SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_START_ACK
         )
-        self.start_ota_data = []
+        self.start_ota_data.fw_hash = self.fw_hash
+        self.start_ota_data.chunks = len(self.chunks)
         if not self.settings.devices:
             print("Broadcast start ota notification...")
             self._send_start_ota("0", firmware)
@@ -523,12 +588,12 @@ class Controller:
                 else:
                     self.transfer_data[device_id].retries[chunk.index] = tries
                 tries += 1
+                time.sleep(0.01)
             time.sleep(0.001)
             send = time.time() - send_time > 1
 
     def transfer(self, firmware):
         """Transfer the firmware to the devices."""
-        start_time = time.time()
         data_size = len(firmware)
         progress = tqdm(
             range(0, data_size),
@@ -561,24 +626,4 @@ class Controller:
             progress.update(chunk.size)
         progress.close()
         self.expected_reply = None
-        print(
-            f"Elapsed: [bold cyan]{time.time() - start_time:.3f}s[/bold cyan]"
-        )
-        print()
-        print("[bold]Transfer status:[/bold]")
-        with Live(self.transfer_status_table, refresh_per_second=4) as live:
-            live.update(self.transfer_status_table)
-            for device_id, status in sorted(self.transfer_data.items()):
-                start_marker, stop_marker = (
-                    ("[bold green]", "[/bold green]")
-                    if bool(status.hashes_match) is True
-                    else ("[bold red]", "[/bold red]")
-                )
-                self.transfer_status_table.add_row(
-                    f"{device_id}",
-                    f"{len(status.chunks_acked)}/{len(self.chunks)}",
-                    f"{start_marker}{bool(status.hashes_match)}{stop_marker}",
-                )
-        print()
-        # print(self.transfer_data)
         return self.transfer_data

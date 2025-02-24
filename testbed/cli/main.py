@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import logging
+import time
 
 import click
 import serial
@@ -8,11 +9,17 @@ import structlog
 from dotbot.serial_interface import SerialInterfaceException, get_default_port
 from rich import print
 from rich.console import Console
+from rich.pretty import pprint
 
 from testbed.swarmit.controller import (
+    CHUNK_SIZE,
     Controller,
     ControllerSettings,
     ResetLocation,
+    print_start_status,
+    print_status,
+    print_stop_status,
+    print_transfer_status,
 )
 
 SERIAL_PORT_DEFAULT = get_default_port()
@@ -85,16 +92,10 @@ def start(ctx):
         return
     if controller.ready_devices:
         started = controller.start()
-        if started and sorted(started) == sorted(controller.ready_devices):
-            print(
-                "Application started with success on "
-                f"[[bold cyan]{', '.join(sorted(started))}[/bold cyan]]"
-            )
-        else:
-            print(
-                f"Started: [{', '.join(sorted(started))}]\n"
-                f"Not started: [{', '.join(sorted(set(controller.ready_devices).difference(set(started))))}]"
-            )
+        print_start_status(
+            sorted(started),
+            sorted(set(controller.ready_devices).difference(set(started))),
+        )
     else:
         print("No device to start")
     controller.terminate()
@@ -123,18 +124,14 @@ def stop(ctx):
         return
     if controller.running_devices or controller.resetting_devices:
         stopped = controller.stop()
-        if stopped and sorted(stopped) == sorted(
-            controller.running_devices + controller.resetting_devices
-        ):
-            print(
-                "Application stopped with success on "
-                f"[[bold cyan]{', '.join(sorted(stopped))}[/bold cyan]]"
-            )
-        else:
-            print(
-                f"Stopped: [{', '.join(sorted(stopped))}]\n"
-                f"Not stopped: [{', '.join(sorted(set(controller.running_devices + controller.resetting_devices).difference(set(stopped))))}]"
-            )
+        print_stop_status(
+            sorted(stopped),
+            sorted(
+                set(
+                    controller.running_devices + controller.resetting_devices
+                ).difference(set(stopped))
+            ),
+        )
     else:
         print("No device to stop")
     controller.terminate()
@@ -226,37 +223,45 @@ def flash(ctx, yes, start, firmware):
         controller.terminate()
         return
     print(
-        f"Devices to flash ([bold white]{len(controller.ready_devices)}"
-        f"[/bold white]): [[bold cyan]{', '.join(controller.ready_devices)}[/bold cyan]]"
+        f"Devices to flash ([bold white]{len(controller.ready_devices)}):[/]"
     )
-    print(f"Image size: [bold cyan]{len(fw)}B[/bold cyan]")
-    print("")
+    pprint(controller.ready_devices, expand_all=True)
     if yes is False:
         click.confirm("Do you want to continue?", default=True, abort=True)
 
     devices = controller.settings.devices
-    ids = controller.start_ota(fw)
-    if (devices and sorted(ids) != sorted(devices)) or (
-        not devices and sorted(ids) != sorted(controller.ready_devices)
+    start_data = controller.start_ota(fw)
+    if (devices and sorted(start_data.ids) != sorted(devices)) or (
+        not devices
+        and sorted(start_data.ids) != sorted(controller.ready_devices)
     ):
         console = Console()
         console.print(
             "[bold red]Error:[/] some acknowledgments are missing "
-            f'({", ".join(sorted(set(controller.ready_devices).difference(set(ids))))}). '
+            f'({", ".join(sorted(set(controller.ready_devices).difference(set(start_data.ids))))}). '
             "Aborting."
         )
         raise click.Abort()
-    try:
-        controller.transfer(fw)
-    except Exception as exc:
+    print()
+    print(f"Image size: [bold cyan]{len(fw)}B[/]")
+    print(f"Image hash: [bold cyan]{start_data.fw_hash.hex().upper()}[/]")
+    print(f"Radio chunks ([bold]{CHUNK_SIZE}B[/bold]): {start_data.chunks}")
+    start_time = time.time()
+    data = controller.transfer(fw)
+    print(f"Elapsed: [bold cyan]{time.time() - start_time:.3f}s[/bold cyan]")
+    print_transfer_status(data, start_data)
+    if not all([value.hashes_match for value in data.values()]):
         controller.terminate()
         console = Console()
-        console.print(f"[bold red]Error:[/] transfer of image failed: {exc}")
+        console.print("[bold red]Error:[/] Hashes do not match.")
         raise click.Abort()
 
     if start is True:
-        controller.start()
-        print("Application started.")
+        started = controller.start()
+        print_start_status(
+            sorted(started),
+            sorted(set(start_data.ids).difference(set(started))),
+        )
     controller.terminate()
 
 
@@ -302,8 +307,11 @@ def status(ctx):
         devices=ctx.obj["devices"],
     )
     controller = Controller(settings)
-    if not controller.status():
+    data = controller.status()
+    if not data:
         click.echo("No devices found.")
+    else:
+        print_status(data)
     controller.terminate()
 
 
