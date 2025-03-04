@@ -11,6 +11,7 @@ from rich import print
 from rich.console import Console
 from rich.pretty import pprint
 
+from testbed.swarmit import __version__
 from testbed.swarmit.controller import (
     CHUNK_SIZE,
     Controller,
@@ -27,6 +28,7 @@ BAUDRATE_DEFAULT = 1000000
 
 
 @click.group(context_settings=dict(help_option_names=["-h", "--help"]))
+@click.version_option(version=__version__)
 @click.option(
     "-p",
     "--port",
