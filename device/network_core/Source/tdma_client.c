@@ -33,7 +33,7 @@
 #define TDMA_CLIENT_HF_TIMER_CC_TX         0                                   ///< Which timer channel will be used for the TX state machine.
 #define TDMA_CLIENT_HF_TIMER_CC_RX         1                                   ///< Which timer channel will be used for the RX state machine.
 #define TDMA_CLIENT_MAX_DELAY_WITHOUT_TX   500000                              ///< Max amount of time that can pass without TXing anything
-#define TDMA_CLIENT_RING_BUFFER_SIZE       10                                  ///< Amount of TX packets the buffer can contain
+#define TDMA_CLIENT_RING_BUFFER_SIZE       128                                 ///< Amount of TX packets the buffer can contain
 #define RADIO_MESSAGE_MAX_SIZE             255                                 ///< Size of buffers used for SPI communications
 #define RADIO_TX_RAMP_UP_TIME              140                                 ///< time it takes the radio to start a transmission
 #define TDMA_CLIENT_TIMER_HF               2
@@ -314,14 +314,14 @@ static bool _message_rb_tx_queue(uint16_t max_tx_duration_us) {
 
 static void _tx_keep_alive_message(void) {
 
-    size_t length = protocol_tdma_keep_alive_to_buffer(_tdma_client_vars.radio_buffer, BROADCAST_ADDRESS);
+    size_t length = protocol_tdma_keep_alive_to_buffer(_tdma_client_vars.radio_buffer, GATEWAY_ADDRESS);
     radio_disable();
     radio_tx(_tdma_client_vars.radio_buffer, length);
 }
 
 static void _tx_tdma_register_message(void) {
 
-    size_t length = protocol_tdma_keep_alive_to_buffer(_tdma_client_vars.radio_buffer, BROADCAST_ADDRESS);
+    size_t length = protocol_tdma_keep_alive_to_buffer(_tdma_client_vars.radio_buffer, GATEWAY_ADDRESS);
     radio_disable();
     radio_tx(_tdma_client_vars.radio_buffer, length);
 }
@@ -428,6 +428,7 @@ static void tdma_client_callback(uint8_t *packet, uint8_t length) {
         } break;
 
         case PACKET_TDMA_KEEP_ALIVE:
+            __NOP();
             // ignore
             break;
 

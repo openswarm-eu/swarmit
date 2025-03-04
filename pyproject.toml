@@ -13,9 +13,12 @@ exclude = [
     "sample/",
 ]
 
+[tool.hatch.version]
+path = "testbed/swarmit/__init__.py"
+
 [project]
 name = "swarmit"
-version = "0.2.0"
+dynamic = ["version"]
 authors = [
     { name="Alexandre Abadie", email="alexandre.abadie@inria.fr" },
 ]

@@ -23,6 +23,14 @@ size_t protocol_header_to_buffer(uint8_t *buffer, uint64_t dst) {
         .dst         = dst,
         .src         = src,
     };
+
     memcpy(buffer, &header, sizeof(protocol_header_t));
     return sizeof(protocol_header_t);
+}
+
+size_t db_protocol_advertizement_to_buffer(uint8_t *buffer, uint64_t dst, application_type_t application) {
+    size_t header_length                        = protocol_header_to_buffer(buffer, dst);
+    *(buffer + header_length)                   = PROTOCOL_ADVERTISEMENT;
+    *(buffer + header_length + sizeof(uint8_t)) = application;
+    return header_length + sizeof(uint8_t) + sizeof(uint8_t);
 }

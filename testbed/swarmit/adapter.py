@@ -68,7 +68,7 @@ class MQTTAdapter(GatewayAdapterBase):
         print(messages)
 
     def on_connect(self, client, userdata, flags, reason_code, properties):
-        self.client.subscribe("/pydotbot/edge_to_controller", qos=2)
+        self.client.subscribe("/pydotbot/edge_to_controller")
 
     def init(self, on_data_received: callable):
         self.on_data_received = on_data_received
@@ -88,9 +88,7 @@ class MQTTAdapter(GatewayAdapterBase):
         self.client.loop_stop()
 
     def send_data(self, data):
-        msg_info = self.client.publish(
+        self.client.publish(
             "/pydotbot/controller_to_edge",
             base64.b64encode(data).decode(),
-            qos=2,
         )
-        msg_info.wait_for_publish()

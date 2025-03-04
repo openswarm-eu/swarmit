@@ -15,10 +15,10 @@
 #include "ipc.h"
 #include "protocol.h"
 #include "rng.h"
+#include "sha256.h"
 #include "tdma_client.h"
 #include "timer_hf.h"
 
-#define SWRMT_USER_IMAGE_BASE_ADDRESS       (0x00004000)
 #define NETCORE_MAIN_TIMER                  (0)
 
 //=========================== variables =========================================
@@ -26,12 +26,16 @@
 typedef struct {
     bool        req_received;
     bool        data_received;
+#if defined(USE_LH2)
+    bool        lh2_location_received;
+#endif
     uint8_t     req_buffer[255];
     uint8_t     notification_buffer[255];
     ipc_req_t   ipc_req;
     bool        ipc_log_received;
     uint8_t     gpio_event_idx;
-    uint8_t     hash[SWRMT_OTA_SHA256_LENGTH];
+    uint8_t     expected_hash[SWRMT_OTA_SHA256_LENGTH];
+    uint8_t     computed_hash[SWRMT_OTA_SHA256_LENGTH];
     uint64_t    device_id;
 } swrmt_app_data_t;
 
@@ -58,8 +62,17 @@ static void _handle_packet(uint8_t *packet, uint8_t length) {
         return;
     }
 
+#if defined(USE_LH2)
+    // Handle LH2 position packets only if in resetting status
+    if ((packet_type == PROTOCOL_LH2_LOCATION) && (ipc_shared_data.status == SWRMT_APPLICATION_RESETTING)) {
+        memcpy((uint8_t *)&ipc_shared_data.current_location, ptr, sizeof(protocol_lh2_location_t));
+        _app_vars.lh2_location_received = true;
+        return;
+    }
+#endif
+
     // ignore other types of packet if not in running mode
-    if (ipc_shared_data.status != SWRMT_EXPERIMENT_RUNNING) {
+    if (ipc_shared_data.status != SWRMT_APPLICATION_RUNNING) {
         return;
     }
 
@@ -78,14 +91,16 @@ int main(void) {
 
     _app_vars.device_id = _deviceid();
 
-    NRF_IPC_NS->INTENSET                            = (1 << IPC_CHAN_REQ) | (1 << IPC_CHAN_LOG_EVENT);
-    NRF_IPC_NS->SEND_CNF[IPC_CHAN_RADIO_RX]         = 1 << IPC_CHAN_RADIO_RX;
-    NRF_IPC_NS->SEND_CNF[IPC_CHAN_EXPERIMENT_START] = 1 << IPC_CHAN_EXPERIMENT_START;
-    NRF_IPC_NS->SEND_CNF[IPC_CHAN_EXPERIMENT_STOP]  = 1 << IPC_CHAN_EXPERIMENT_STOP;
-    NRF_IPC_NS->SEND_CNF[IPC_CHAN_OTA_START]        = 1 << IPC_CHAN_OTA_START;
-    NRF_IPC_NS->SEND_CNF[IPC_CHAN_OTA_CHUNK]        = 1 << IPC_CHAN_OTA_CHUNK;
-    NRF_IPC_NS->RECEIVE_CNF[IPC_CHAN_REQ]           = 1 << IPC_CHAN_REQ;
-    NRF_IPC_NS->RECEIVE_CNF[IPC_CHAN_LOG_EVENT]     = 1 << IPC_CHAN_LOG_EVENT;
+    NRF_IPC_NS->INTENSET                             = (1 << IPC_CHAN_REQ) | (1 << IPC_CHAN_LOG_EVENT);
+    NRF_IPC_NS->SEND_CNF[IPC_CHAN_RADIO_RX]          = 1 << IPC_CHAN_RADIO_RX;
+    NRF_IPC_NS->SEND_CNF[IPC_CHAN_APPLICATION_START] = 1 << IPC_CHAN_APPLICATION_START;
+    NRF_IPC_NS->SEND_CNF[IPC_CHAN_APPLICATION_STOP]  = 1 << IPC_CHAN_APPLICATION_STOP;
+    //NRF_IPC_NS->SEND_CNF[IPC_CHAN_APPLICATION_RESET] = 1 << IPC_CHAN_APPLICATION_RESET;
+    NRF_IPC_NS->SEND_CNF[IPC_CHAN_OTA_START]         = 1 << IPC_CHAN_OTA_START;
+    NRF_IPC_NS->SEND_CNF[IPC_CHAN_OTA_CHUNK]         = 1 << IPC_CHAN_OTA_CHUNK;
+    NRF_IPC_NS->SEND_CNF[IPC_CHAN_LH2_LOCATION]      = 1 << IPC_CHAN_LH2_LOCATION;
+    NRF_IPC_NS->RECEIVE_CNF[IPC_CHAN_REQ]            = 1 << IPC_CHAN_REQ;
+    NRF_IPC_NS->RECEIVE_CNF[IPC_CHAN_LOG_EVENT]      = 1 << IPC_CHAN_LOG_EVENT;
 
     NVIC_EnableIRQ(IPC_IRQn);
     NVIC_ClearPendingIRQ(IPC_IRQn);
@@ -104,21 +119,9 @@ int main(void) {
             _app_vars.req_received = false;
             swrmt_request_t *req = (swrmt_request_t *)_app_vars.req_buffer;
             switch (req->type) {
-                case SWRMT_REQUEST_START:
-                    if (ipc_shared_data.status == SWRMT_EXPERIMENT_RUNNING) {
-                        break;
-                    }
-                    NRF_IPC_NS->TASKS_SEND[IPC_CHAN_EXPERIMENT_START] = 1;
-                    break;
-                case SWRMT_REQUEST_STOP:
-                    if (ipc_shared_data.status == SWRMT_EXPERIMENT_READY) {
-                        break;
-                    }
-                    NRF_IPC_NS->TASKS_SEND[IPC_CHAN_EXPERIMENT_STOP] = 1;
-                    break;
                 case SWRMT_REQUEST_STATUS:
                 {
-                    size_t length = protocol_header_to_buffer(_app_vars.notification_buffer, BROADCAST_ADDRESS);
+                    size_t length = protocol_header_to_buffer(_app_vars.notification_buffer, GATEWAY_ADDRESS);
                     _app_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_STATUS;
                     uint64_t device_id = _deviceid();
                     memcpy(_app_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
@@ -126,24 +129,53 @@ int main(void) {
                     _app_vars.notification_buffer[length++] = ipc_shared_data.status;
                     tdma_client_tx(_app_vars.notification_buffer, length);
                 }   break;
+                case SWRMT_REQUEST_START:
+                    if (ipc_shared_data.status != SWRMT_APPLICATION_READY) {
+                        break;
+                    }
+                    NRF_IPC_NS->TASKS_SEND[IPC_CHAN_APPLICATION_START] = 1;
+                    break;
+                case SWRMT_REQUEST_STOP:
+                    if ((ipc_shared_data.status != SWRMT_APPLICATION_RUNNING) && (ipc_shared_data.status != SWRMT_APPLICATION_RESETTING)) {
+                        break;
+                    }
+                    ipc_shared_data.status = SWRMT_APPLICATION_STOPPING;
+                    NRF_IPC_NS->TASKS_SEND[IPC_CHAN_APPLICATION_STOP] = 1;
+                    break;
+                case SWRMT_REQUEST_RESET:
+                    if (ipc_shared_data.status != SWRMT_APPLICATION_READY) {
+                        break;
+                    }
+#if defined(USE_LH2)
+                    memcpy((uint8_t *)&ipc_shared_data.target_location, req->data, sizeof(protocol_lh2_location_t));
+#endif
+                    ipc_shared_data.status = SWRMT_APPLICATION_RESETTING;
+                    //NRF_IPC_NS->TASKS_SEND[IPC_CHAN_APPLICATION_RESET] = 1;
+                    break;
                 case SWRMT_REQUEST_OTA_START:
                 {
-                    if (ipc_shared_data.status == SWRMT_EXPERIMENT_RUNNING) {
+                    if (ipc_shared_data.status != SWRMT_APPLICATION_READY) {
                         break;
                     }
                     const swrmt_ota_start_pkt_t *pkt = (const swrmt_ota_start_pkt_t *)req->data;
                     // Copy expected hash
-                    memcpy(_app_vars.hash, pkt->hash, SWRMT_OTA_SHA256_LENGTH);
+                    memcpy(_app_vars.expected_hash, pkt->hash, SWRMT_OTA_SHA256_LENGTH);
+
+                    // Initialize computed hash
+                    memset(_app_vars.computed_hash, 0, SWRMT_OTA_SHA256_LENGTH);
+                    sha256_init();
 
                     // Erase the corresponding flash pages.
                     mutex_lock();
                     ipc_shared_data.ota.image_size = pkt->image_size;
+                    ipc_shared_data.ota.chunk_count = pkt->chunk_count;
+                    ipc_shared_data.ota.hashes_match = 0;
                     mutex_unlock();
                     NRF_IPC_NS->TASKS_SEND[IPC_CHAN_OTA_START] = 1;
                 } break;
                 case SWRMT_REQUEST_OTA_CHUNK:
                 {
-                    if (ipc_shared_data.status == SWRMT_EXPERIMENT_RUNNING) {
+                    if (ipc_shared_data.status != SWRMT_APPLICATION_READY) {
                         break;
                     }
                     const swrmt_ota_chunk_pkt_t *pkt = (const swrmt_ota_chunk_pkt_t *)req->data;
@@ -152,12 +184,30 @@ int main(void) {
                     ipc_shared_data.ota.chunk_size = pkt->chunk_size;
                     memcpy((uint8_t *)ipc_shared_data.ota.chunk, pkt->chunk, pkt->chunk_size);
                     mutex_unlock();
+
+                    // Update computed hash
+                    sha256_update((const uint8_t *)ipc_shared_data.ota.chunk, ipc_shared_data.ota.chunk_size);
+
+                    // If last chunk, finalize computed hash, compare with expected hash and report to application core via shared memory
+                    if (ipc_shared_data.ota.chunk_index == ipc_shared_data.ota.chunk_count - 1) {
+                        sha256_finalize(_app_vars.computed_hash);
+                        mutex_lock();
+                        ipc_shared_data.ota.hashes_match = !memcmp(_app_vars.computed_hash, _app_vars.expected_hash, SWRMT_OTA_SHA256_LENGTH);
+                        mutex_unlock();
+                    }
+
                     NRF_IPC_NS->TASKS_SEND[IPC_CHAN_OTA_CHUNK] = 1;
                 } break;
                 default:
                     break;
             }
         }
+
+#if defined(USE_LH2)
+        if (_app_vars.lh2_location_received) {
+            NRF_IPC_NS->TASKS_SEND[IPC_CHAN_LH2_LOCATION] = 1;
+        }
+#endif
 
         if (_app_vars.ipc_req != IPC_REQ_NONE) {
             ipc_shared_data.net_ack = false;
