@@ -61,7 +61,7 @@ class TransferDataStatus:
     """Class that holds transfer data status for a single device."""
 
     retries: list[int] = dataclasses.field(default_factory=lambda: [])
-    chunks_acked: list[int] = dataclasses.field(default_factory=lambda: [])
+    chunks_acked: set[int] = dataclasses.field(default_factory=lambda: set())
     hashes_match: bool = False
 
 
@@ -126,7 +126,7 @@ def print_stop_status(stopped_data: list[str], not_stopped: list[str]) -> None:
                 f"{device_id}", "[bold green]:heavy_check_mark:[/]"
             )
         for device_id in sorted(not_stopped):
-            status_table.add_row(f"{device_id}", "[bold red]No[/]")
+            status_table.add_row(f"{device_id}", "[bold red]:x:[/]")
 
 
 def print_transfer_status(
@@ -326,7 +326,7 @@ class Controller:
                 frame.payload.index
                 not in self.transfer_data[device_id].chunks_acked
             ):
-                self.transfer_data[device_id].chunks_acked.append(
+                self.transfer_data[device_id].chunks_acked.add(
                     frame.payload.index
                 )
             self.transfer_data[device_id].hashes_match = (
@@ -541,34 +541,25 @@ class Controller:
 
         def is_chunk_acknowledged():
             if device_id == "0":
-                return (
-                    sorted(self.transfer_data.keys())
-                    == sorted(self.ready_devices)
-                    and all(
-                        [
-                            status.chunks_acked
-                            for status in self.transfer_data.values()
-                        ]
-                    )
-                    and all(
-                        [
-                            status.chunks_acked[-1] == chunk.index
-                            for status in self.transfer_data.values()
-                        ]
-                    )
+                return sorted(self.transfer_data.keys()) == sorted(
+                    self.ready_devices
+                ) and all(
+                    [
+                        chunk.index in status.chunks_acked
+                        for status in self.transfer_data.values()
+                    ]
                 )
             else:
                 return (
                     device_id in self.transfer_data.keys()
-                    and self.transfer_data[device_id].chunks_acked
-                    and self.transfer_data[device_id].chunks_acked[-1]
-                    == chunk.index
+                    and chunk.index
+                    in self.transfer_data[device_id].chunks_acked
                 )
 
         send_time = time.time()
         send = True
         tries = 0
-        while tries < 5:
+        while tries < 3:
             if is_chunk_acknowledged():
                 break
             if send is True:
@@ -579,7 +570,6 @@ class Controller:
                     chunk=chunk.data,
                 )
                 self.send_frame(Frame(header=Header(), payload=payload))
-                send_time = time.time()
                 if device_id == "0":
                     for device_id in self.ready_devices:
                         self.transfer_data[device_id].retries[
@@ -589,6 +579,7 @@ class Controller:
                     self.transfer_data[device_id].retries[chunk.index] = tries
                 tries += 1
                 time.sleep(0.01)
+                send_time = time.time()
             time.sleep(0.001)
             send = time.time() - send_time > 1
 

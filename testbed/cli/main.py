@@ -72,8 +72,14 @@ def main(ctx, port, baudrate, edge, devices):
 
 
 @main.command()
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="Print start result.",
+)
 @click.pass_context
-def start(ctx):
+def start(ctx, verbose):
     """Start the user application."""
     try:
         settings = ControllerSettings(
@@ -98,14 +104,27 @@ def start(ctx):
             sorted(started),
             sorted(set(controller.ready_devices).difference(set(started))),
         )
+        if verbose:
+            print("Started devices:")
+            pprint(started)
+            print("Not started devices:")
+            pprint(
+                sorted(set(controller.ready_devices).difference(set(started)))
+            )
     else:
         print("No device to start")
     controller.terminate()
 
 
 @main.command()
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="Print start result.",
+)
 @click.pass_context
-def stop(ctx):
+def stop(ctx, verbose):
     """Stop the user application."""
     try:
         settings = ControllerSettings(
@@ -134,6 +153,18 @@ def stop(ctx):
                 ).difference(set(stopped))
             ),
         )
+        if verbose:
+            print("Started devices:")
+            pprint(stopped)
+            print("Not started devices:")
+            pprint(
+                sorted(
+                    set(
+                        controller.running_devices
+                        + controller.resetting_devices
+                    ).difference(set(stopped))
+                )
+            )
     else:
         print("No device to stop")
     controller.terminate()
@@ -156,8 +187,8 @@ def reset(ctx, locations):
         return
     locations = {
         location.split(':')[0]: ResetLocation(
-            pos_x=int(location.split(':')[1].split(',')[0]),
-            pos_y=int(location.split(':')[1].split(',')[1]),
+            pos_x=int(float(location.split(':')[1].split(',')[0]) * 1e6),
+            pos_y=int(float(location.split(':')[1].split(',')[1]) * 1e6),
         )
         for location in locations.split("-")
     }
@@ -201,9 +232,15 @@ def reset(ctx, locations):
     is_flag=True,
     help="Start the firmware once flashed.",
 )
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="Print transfer data.",
+)
 @click.argument("firmware", type=click.File(mode="rb"), required=False)
 @click.pass_context
-def flash(ctx, yes, start, firmware):
+def flash(ctx, yes, start, verbose, firmware):
     """Flash a firmware to the robots."""
     console = Console()
     if firmware is None:
@@ -252,6 +289,8 @@ def flash(ctx, yes, start, firmware):
     data = controller.transfer(fw)
     print(f"Elapsed: [bold cyan]{time.time() - start_time:.3f}s[/bold cyan]")
     print_transfer_status(data, start_data)
+    if verbose:
+        pprint(data)
     if not all([value.hashes_match for value in data.values()]):
         controller.terminate()
         console = Console()
