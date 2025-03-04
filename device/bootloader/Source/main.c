@@ -23,18 +23,24 @@
 
 // DotBot-firmware includes
 #include "board_config.h"
+#include "gpio.h"
 #include "lh2.h"
+#include "motors.h"
 #include "move.h"
-#include "timer_hf.h"
+#include "timer.h"
 
-#define SWARMIT_BASE_ADDRESS    (0x8000)
-#define RADIO_FREQ              (8U)
+#define SWARMIT_BASE_ADDRESS        (0x8000)
+#define RADIO_FREQ                  (8U)
 
-#define LH2_UPDATE_DELAY_US        (100000UL)   ///< 100ms delay between each LH2 data refresh
-#define ROBOT_REDUCE_SPEED_FACTOR  (0.7)  ///< Reduction factor applied to speed when close to target or error angle is too large
-#define ROBOT_REDUCE_SPEED_ANGLE   (25)   ///< Max angle amplitude where speed reduction factor is applied
-#define ROBOT_ANGULAR_SPEED_FACTOR (35)   ///< Constant applied to the normalized angle to target error
-#define ROBOT_ANGULAR_SIDE_FACTOR  (-1)   ///< Angular side factor
+#define LH2_UPDATE_DELAY_MS         (200U) ///< 100ms delay between each LH2 data refresh
+
+#define ROBOT_DISTANCE_THRESHOLD    (0.02)
+#define ROBOT_DIRECTION_THRESHOLD   (0.01)
+#define ROBOT_MAX_SPEED             (70)   ///< Max speed in autonomous control mode
+#define ROBOT_REDUCE_SPEED_FACTOR   (0.7)  ///< Reduction factor applied to speed when close to target or error angle is too large
+#define ROBOT_REDUCE_SPEED_ANGLE    (25)   ///< Max angle amplitude where speed reduction factor is applied
+#define ROBOT_ANGULAR_SPEED_FACTOR  (35)   ///< Constant applied to the normalized angle to target error
+#define ROBOT_ANGULAR_SIDE_FACTOR   (-1)   ///< Angular side factor
 
 extern volatile __attribute__((section(".shared_data"))) ipc_shared_data_t ipc_shared_data;
 
@@ -49,16 +55,21 @@ typedef struct {
     db_lh2_t    lh2;
     bool        lh2_location;
     bool        lh2_update;
+    bool        advertise;
 #endif
 } bootloader_app_data_t;
 
 #if defined(USE_LH2)
 typedef struct {
-    int16_t current_angle;
-    bool refresh;
+    protocol_lh2_location_t lh2_previous_location;
+    int16_t direction;
+    bool initial_direction_compensated;
+    bool final_direction_compensated;
+    bool target_reached;
 } control_loop_data_t;
 
 static control_loop_data_t _control_loop_vars = { 0 };
+static const gpio_t _status_led = { .port = 1, .pin = 5 };
 #endif
 
 static bootloader_app_data_t _bootloader_vars = { 0 };
@@ -227,13 +238,17 @@ static void _update_lh2(void) {
     _bootloader_vars.lh2_update = true;
 }
 
+static void _advertise(void) {
+    _bootloader_vars.advertise = true;
+}
+
 static void _process_lh2(void) {
     if (_bootloader_vars.lh2.data_ready[0][0] == DB_LH2_PROCESSED_DATA_AVAILABLE && _bootloader_vars.lh2.data_ready[1][0] == DB_LH2_PROCESSED_DATA_AVAILABLE) {
         db_lh2_stop();
         // Prepare the radio buffer
-        size_t length = protocol_header_to_buffer(_bootloader_vars.notification_buffer, BROADCAST_ADDRESS);
+        size_t length = protocol_header_to_buffer(_bootloader_vars.notification_buffer, GATEWAY_ADDRESS);
         _bootloader_vars.notification_buffer[length++] = PROTOCOL_DOTBOT_DATA;
-        memcpy(_bootloader_vars.notification_buffer + length, &_control_loop_vars.current_angle, sizeof(int16_t));
+        memcpy(_bootloader_vars.notification_buffer + length, &_control_loop_vars.direction, sizeof(int16_t));
         length += sizeof(int16_t);
         _bootloader_vars.notification_buffer[length++] = LH2_SWEEP_COUNT;
         // Add the LH2 sweep
@@ -250,68 +265,100 @@ static void _process_lh2(void) {
 
         db_lh2_start();
     }
-    _bootloader_vars.lh2_update = false;
 }
 
 static void _compute_angle(const protocol_lh2_location_t *head, const protocol_lh2_location_t *tail, int16_t *angle) {
-    float dx = ((float)head->x - (float)tail->x) / 1e6;
-    float dy = ((float)head->y - (float)tail->y) / 1e6;
+    float dx = ((float)head->x / 1e6) - ((float)tail->x / 1e6);
+    float dy = ((float)head->y / 1e6) - ((float)tail->y / 1e6);
     float distance = sqrtf(powf(dx, 2) + powf(dy, 2));
 
-    int8_t sideFactor = (dx > 0) ? -1 : 1;
-    *angle = (int16_t)(acosf(dy / distance) * 180 / M_PI) * sideFactor;
-    if (*angle < 0) {
-        *angle = 360 + *angle;
-    }
-}
-
-static void _update_control_loop(void) {
-    if (!_control_loop_vars.refresh) {
+    if (distance < ROBOT_DIRECTION_THRESHOLD) {
         return;
     }
 
-    // Move straight to compute the current angle
-    if (_control_loop_vars.current_angle == -1000) {
-        _control_loop_vars.refresh = false;
-        const protocol_lh2_location_t start_location = {
-            .x = ipc_shared_data.current_location.x,
-            .y = ipc_shared_data.current_location.y,
-        };
-        // Move straight over 10cm
-        db_move_straight(10, 50);
+    int8_t sideFactor = (dx > 0) ? -1 : 1;
+    int16_t result = (int16_t)(acosf(dy / distance) * 180 / M_PI) * sideFactor;
+    if (result < -360) {
+        result += 360;
+    }
+    *angle = result;
+}
 
-        // Recompute angle
-        _compute_angle((const protocol_lh2_location_t *)&ipc_shared_data.current_location, &start_location, &_control_loop_vars.current_angle);
-        _control_loop_vars.refresh = true;
+static void _compensate_angle(int16_t angle) {
+    int8_t speed = -45;
+
+    if (angle < 0) {
+        speed *= -1;
+        angle *= -1;
+    }
+    db_move_rotate(angle, speed);
+}
+
+static void _compensate_initial_direction(void) {
+    // Move straight to be able to compute the current angle
+    if (_control_loop_vars.direction == -1000) {
+        db_move_straight(50, 50);
         return;
     }
 
     // Compute angle to target and rotate
     int16_t angle_to_target = 0;
     _compute_angle((const protocol_lh2_location_t *)&ipc_shared_data.target_location, (const protocol_lh2_location_t *)&ipc_shared_data.current_location, &angle_to_target);
-    int16_t error_angle = angle_to_target - _control_loop_vars.current_angle;
-    if (error_angle != 0) {
-        _control_loop_vars.refresh = false;
-        // Rotate
-        db_move_rotate(error_angle, 45);
+    int16_t error_angle = angle_to_target - _control_loop_vars.direction;
+    _compensate_angle(error_angle);
+    db_move_straight(50, 50);
+    _control_loop_vars.initial_direction_compensated = true;
+}
 
-        _control_loop_vars.refresh = true;
+static void _update_control_loop(void) {
+    if (ipc_shared_data.status != SWRMT_APPLICATION_RESETTING) {
         return;
     }
 
-    // Compute distance and move straight if too far from target
-    float dx = ((float)ipc_shared_data.target_location.x - (float)ipc_shared_data.current_location.x) / 1e6;
-    float dy = ((float)ipc_shared_data.target_location.y - (float)ipc_shared_data.current_location.y) / 1e6;
+    float dx = ((float)ipc_shared_data.target_location.x / 1e6) - ((float)ipc_shared_data.current_location.x / 1e6);
+    float dy = ((float)ipc_shared_data.target_location.y / 1e6) - ((float)ipc_shared_data.current_location.y / 1e6);
     float distanceToTarget = sqrtf(powf(dx, 2) + powf(dy, 2));
-    if ((uint32_t)(distanceToTarget * 1e6) > 20000) {
-        _control_loop_vars.refresh = false;
-        // Move straight
-        db_move_straight(10, 50);
-        _control_loop_vars.refresh = true;
-        return;
+    float speedReductionFactor = 1.0;  // No reduction by default
+
+    if ((uint32_t)(distanceToTarget) < 0.2) {
+        speedReductionFactor = ROBOT_REDUCE_SPEED_FACTOR;
     }
 
-    ipc_shared_data.status = SWRMT_APPLICATION_READY;
+    int16_t left_speed      = 0;
+    int16_t right_speed     = 0;
+    int16_t angular_speed   = 0;
+    int16_t error_angle     = 0;
+    int16_t angle_to_target = 0;
+    if (distanceToTarget < ROBOT_DISTANCE_THRESHOLD) {
+        _control_loop_vars.target_reached = true;
+     } else if (_control_loop_vars.direction == -1000) {
+        // Unknown direction, just move forward a bit
+        left_speed  = (int16_t)ROBOT_MAX_SPEED * speedReductionFactor;
+        right_speed = (int16_t)ROBOT_MAX_SPEED * speedReductionFactor;
+    } else {
+        // compute angle to target waypoint
+        _compute_angle((const protocol_lh2_location_t *)&ipc_shared_data.target_location, (const protocol_lh2_location_t *)&ipc_shared_data.current_location, &angle_to_target);
+        error_angle = angle_to_target - _control_loop_vars.direction;
+        if (error_angle < -180) {
+            error_angle += 360;
+        } else if (error_angle > 180) {
+            error_angle -= 360;
+        }
+        if (error_angle > ROBOT_REDUCE_SPEED_ANGLE || error_angle < -ROBOT_REDUCE_SPEED_ANGLE) {
+            speedReductionFactor = ROBOT_REDUCE_SPEED_FACTOR;
+        }
+        angular_speed = (int16_t)(((float)error_angle / 180) * ROBOT_ANGULAR_SPEED_FACTOR);
+        left_speed    = (int16_t)(((ROBOT_MAX_SPEED * speedReductionFactor) - (angular_speed * ROBOT_ANGULAR_SIDE_FACTOR)));
+        right_speed   = (int16_t)(((ROBOT_MAX_SPEED * speedReductionFactor) + (angular_speed * ROBOT_ANGULAR_SIDE_FACTOR)));
+        if (left_speed > ROBOT_MAX_SPEED) {
+            left_speed = ROBOT_MAX_SPEED;
+        }
+        if (right_speed > ROBOT_MAX_SPEED) {
+            right_speed = ROBOT_MAX_SPEED;
+        }
+    }
+
+    db_motors_set_speed(left_speed, right_speed);
 }
 #endif
 
@@ -364,7 +411,7 @@ int main(void) {
     // Start the network core
     release_network_core();
 
-    tdma_client_init(RADIO_BLE_2MBit, RADIO_FREQ);
+    tdma_client_init(RADIO_BLE_1MBit, RADIO_FREQ);
 
     // Check reset reason and switch to user image if reset was not triggered by any wdt timeout
     uint32_t resetreas = NRF_RESET_S->RESETREAS;
@@ -373,11 +420,12 @@ int main(void) {
         (resetreas & RESET_RESETREAS_DOG0_Detected << RESET_RESETREAS_DOG0_Pos) ||
         (resetreas & RESET_RESETREAS_DOG1_Detected << RESET_RESETREAS_DOG1_Pos)
     )) {
+    //if (0) {
         // Experiment is running
         ipc_shared_data.status = SWRMT_APPLICATION_RUNNING;
 
         // Notify application is about to start
-        size_t length = protocol_header_to_buffer(_bootloader_vars.notification_buffer, BROADCAST_ADDRESS);
+        size_t length = protocol_header_to_buffer(_bootloader_vars.notification_buffer, GATEWAY_ADDRESS);
         _bootloader_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_STARTED;
         uint64_t device_id = _deviceid();
         memcpy(_bootloader_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
@@ -406,7 +454,7 @@ int main(void) {
 
     if (resetreas & RESET_RESETREAS_DOG1_Detected << RESET_RESETREAS_DOG1_Pos) {
         // Notify application is stopped
-        size_t length = protocol_header_to_buffer(_bootloader_vars.notification_buffer, BROADCAST_ADDRESS);
+        size_t length = protocol_header_to_buffer(_bootloader_vars.notification_buffer, GATEWAY_ADDRESS);
         //size_t length = 0;
         _bootloader_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_STOPPED;
         uint64_t device_id = _deviceid();
@@ -419,14 +467,25 @@ int main(void) {
 
 #if defined(USE_LH2)
     // Initialize current angle to invalid value to force a recomputation when reset is called
-    _control_loop_vars.current_angle = -1000;
+    _control_loop_vars.direction = -1000;
+    _control_loop_vars.target_reached = false;
+    _control_loop_vars.initial_direction_compensated = false;
+    _control_loop_vars.final_direction_compensated = false;
+
+    static const gpio_t _reg_pin = { .port = 0, .pin = 8 };
+    db_gpio_init(&_reg_pin, DB_GPIO_OUT);
+    db_gpio_set(&_reg_pin);
 
     // PWM, Motors and move library initialization
     db_move_init();
 
+    // Status LED
+    db_gpio_init(&_status_led, DB_GPIO_OUT);
+
     // Periodic Timer and Lighthouse initialization
-    db_timer_hf_init(0);
-    db_timer_hf_set_periodic_us(0, 1, LH2_UPDATE_DELAY_US, &_update_lh2);
+    db_timer_init(1);
+    db_timer_set_periodic_ms(1, 1, LH2_UPDATE_DELAY_MS, &_update_lh2);
+    db_timer_set_periodic_ms(1, 2, 500, &_advertise);
     db_lh2_init(&_bootloader_vars.lh2, &db_lh2_d, &db_lh2_e);
     db_lh2_start();
 #endif
@@ -451,7 +510,7 @@ int main(void) {
             printf("Erasing done\n");
 
             // Notify erase is done
-            size_t length = protocol_header_to_buffer(_bootloader_vars.notification_buffer, BROADCAST_ADDRESS);
+            size_t length = protocol_header_to_buffer(_bootloader_vars.notification_buffer, GATEWAY_ADDRESS);
             _bootloader_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_OTA_START_ACK;
             uint64_t device_id = _deviceid();
             memcpy(_bootloader_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
@@ -468,7 +527,7 @@ int main(void) {
             nvmc_write((uint32_t *)addr, (void *)ipc_shared_data.ota.chunk, ipc_shared_data.ota.chunk_size);
 
             // Notify chunk has been written
-            size_t length = protocol_header_to_buffer(_bootloader_vars.notification_buffer, BROADCAST_ADDRESS);
+            size_t length = protocol_header_to_buffer(_bootloader_vars.notification_buffer, GATEWAY_ADDRESS);
             _bootloader_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_OTA_CHUNK_ACK;
             uint64_t device_id = _deviceid();
             memcpy(_bootloader_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
@@ -484,13 +543,60 @@ int main(void) {
         }
 
 #if defined(USE_LH2)
+        if (_bootloader_vars.advertise) {
+            db_gpio_toggle(&_status_led);
+            size_t length = db_protocol_advertizement_to_buffer(_bootloader_vars.notification_buffer, GATEWAY_ADDRESS, DotBot);
+             tdma_client_tx(_bootloader_vars.notification_buffer, length);
+            _bootloader_vars.advertise = false;
+        }
+
+        if (ipc_shared_data.status != SWRMT_APPLICATION_RESETTING) {
+            continue;
+        }
+
+        // Process available lighthouse data
+        db_lh2_process_location(&_bootloader_vars.lh2);
         if (_bootloader_vars.lh2_update) {
             // Copy LH2 code from dotbot application
             _process_lh2();
+            _bootloader_vars.lh2_update = false;
         }
 
-        if (_bootloader_vars.lh2_location && ipc_shared_data.status == SWRMT_APPLICATION_RESETTING) {
-            _update_control_loop();
+        if (_bootloader_vars.lh2_location) {
+            int16_t new_direction = -1000;
+            _compute_angle(
+                (const protocol_lh2_location_t *)&ipc_shared_data.current_location,
+                &_control_loop_vars.lh2_previous_location,
+                &new_direction
+            );
+            if (new_direction != -1000) {
+                _control_loop_vars.direction = new_direction;
+            }
+
+            _control_loop_vars.lh2_previous_location.x = ipc_shared_data.current_location.x;
+            _control_loop_vars.lh2_previous_location.y = ipc_shared_data.current_location.y;
+
+            if (!_control_loop_vars.initial_direction_compensated) {
+                _compensate_initial_direction();
+            }
+
+            if (!_control_loop_vars.target_reached) {
+                _update_control_loop();
+            }
+
+            if (_control_loop_vars.target_reached) {
+                _compensate_angle(_control_loop_vars.direction);
+                ipc_shared_data.status = SWRMT_APPLICATION_READY;
+                _control_loop_vars.direction = -1000;
+                _control_loop_vars.target_reached = false;
+                _control_loop_vars.initial_direction_compensated = false;
+                _control_loop_vars.final_direction_compensated = false;
+                _control_loop_vars.lh2_previous_location.x = 0;
+                _control_loop_vars.lh2_previous_location.y = 0;
+                //NRF_WDT1_S->TASKS_START = WDT_TASKS_START_TASKS_START_Trigger << WDT_TASKS_START_TASKS_START_Pos;
+            }
+
+            _bootloader_vars.lh2_location = false;
         }
 #endif
     }

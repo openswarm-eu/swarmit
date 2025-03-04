@@ -121,7 +121,7 @@ int main(void) {
             switch (req->type) {
                 case SWRMT_REQUEST_STATUS:
                 {
-                    size_t length = protocol_header_to_buffer(_app_vars.notification_buffer, BROADCAST_ADDRESS);
+                    size_t length = protocol_header_to_buffer(_app_vars.notification_buffer, GATEWAY_ADDRESS);
                     _app_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_STATUS;
                     uint64_t device_id = _deviceid();
                     memcpy(_app_vars.notification_buffer + length, &device_id, sizeof(uint64_t));

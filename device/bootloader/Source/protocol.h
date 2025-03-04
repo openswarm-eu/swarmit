@@ -58,6 +58,15 @@ typedef enum {
     SWRMT_NOTIFICATION_LOG_EVENT = 0x96,
 } swrmt_notification_type_t;
 
+/// Application type
+typedef enum {
+    DotBot        = 0,  ///< DotBot application
+    SailBot       = 1,  ///< SailBot application
+    FreeBot       = 2,  ///< FreeBot application
+    XGO           = 3,  ///< XGO application
+    LH2_mini_mote = 4,  ///< LH2 mini mote application
+} application_type_t;
+
 /// Protocol packet type
 typedef enum {
     PACKET_BEACON            = 1,  ///< Beacon packet
@@ -71,6 +80,7 @@ typedef enum {
 typedef enum {
     PROTOCOL_LH2_RAW_DATA       = 2,   ///< Lighthouse 2 raw data
     PROTOCOL_LH2_LOCATION       = 3,   ///< Lighthouse processed locations
+    PROTOCOL_ADVERTISEMENT      = 4,   ///< DotBot advertisements
     PROTOCOL_DOTBOT_DATA        = 6,   ///< DotBot specific data (for now location and direction)
     PROTOCOL_LH2_PROCESSED_DATA = 12,  ///< Lighthouse 2 data processed at the DotBot
 } protocol_data_type_t;
@@ -113,5 +123,16 @@ typedef struct __attribute__((packed)) {
  * @return                  Number of bytes written in the buffer
  */
 size_t protocol_header_to_buffer(uint8_t *buffer, uint64_t dst);
+
+/**
+ * @brief   Write an application advertizement packet in a buffer
+ *
+ * @param[out]  buffer      Bytes array to write to
+ * @param[in]   dst         Destination address written in the header
+ * @param[in]   application Type of application advertized
+ *
+ * @return                  Number of bytes written in the buffer
+ */
+size_t db_protocol_advertizement_to_buffer(uint8_t *buffer, uint64_t dst, application_type_t application);
 
 #endif

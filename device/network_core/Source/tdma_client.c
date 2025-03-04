@@ -314,14 +314,14 @@ static bool _message_rb_tx_queue(uint16_t max_tx_duration_us) {
 
 static void _tx_keep_alive_message(void) {
 
-    size_t length = protocol_tdma_keep_alive_to_buffer(_tdma_client_vars.radio_buffer, BROADCAST_ADDRESS);
+    size_t length = protocol_tdma_keep_alive_to_buffer(_tdma_client_vars.radio_buffer, GATEWAY_ADDRESS);
     radio_disable();
     radio_tx(_tdma_client_vars.radio_buffer, length);
 }
 
 static void _tx_tdma_register_message(void) {
 
-    size_t length = protocol_tdma_keep_alive_to_buffer(_tdma_client_vars.radio_buffer, BROADCAST_ADDRESS);
+    size_t length = protocol_tdma_keep_alive_to_buffer(_tdma_client_vars.radio_buffer, GATEWAY_ADDRESS);
     radio_disable();
     radio_tx(_tdma_client_vars.radio_buffer, length);
 }
@@ -428,6 +428,7 @@ static void tdma_client_callback(uint8_t *packet, uint8_t length) {
         } break;
 
         case PACKET_TDMA_KEEP_ALIVE:
+            __NOP();
             // ignore
             break;
 

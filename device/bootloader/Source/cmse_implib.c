@@ -24,6 +24,7 @@ __attribute__((cmse_nonsecure_entry)) void swarmit_send_data_packet(const uint8_
     _tx_data_buffer[frame_length++] = PACKET_DATA;
     memcpy(_tx_data_buffer + frame_length, &packet, length);
     frame_length += length;
+
     tdma_client_tx(_tx_data_buffer, frame_length);
 }
 
