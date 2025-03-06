@@ -55,21 +55,25 @@ pip install swarmit
 Default usage:
 
 ```
-swarmit --help
 Usage: swarmit [OPTIONS] COMMAND [ARGS]...
 
 Options:
+  --version               Show the version and exit.
   -p, --port TEXT         Serial port to use to send the bitstream to the
                           gateway. Default: /dev/ttyACM0.
   -b, --baudrate INTEGER  Serial port baudrate. Default: 1000000.
+  -e, --edge              Use MQTT adapter to communicate with an edge
+                          gateway.
   -d, --devices TEXT      Subset list of devices to interact with, separated
                           with ,
-  --help                  Show this message and exit.
+  -h, --help              Show this message and exit.
 
 Commands:
-  flash
-  monitor
-  start
-  status
-  stop
+  flash    Flash a firmware to the robots.
+  message  Send a custom text message to the robots.
+  monitor  Monitor running applications.
+  reset    Reset robots locations.
+  start    Start the user application.
+  status   Print current status of the robots.
+  stop     Stop the user application.
 ```
