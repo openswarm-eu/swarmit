@@ -32,12 +32,15 @@
 #define SWARMIT_BASE_ADDRESS        (0x8000)
 #define RADIO_FREQ                  (8U)
 
-#define LH2_UPDATE_DELAY_MS         (200U) ///< 100ms delay between each LH2 data refresh
+#define ADVERTIZE_DELAY             (2000U)
+#define LH2_UPDATE_DELAY_MS         (250U) ///< 100ms delay between each LH2 data refresh
 
-#define ROBOT_DISTANCE_THRESHOLD    (0.02)
+#define ROBOT_DISTANCE_THRESHOLD    (0.05)
 #define ROBOT_DIRECTION_THRESHOLD   (0.01)
-#define ROBOT_MAX_SPEED             (70)   ///< Max speed in autonomous control mode
-#define ROBOT_REDUCE_SPEED_FACTOR   (0.7)  ///< Reduction factor applied to speed when close to target or error angle is too large
+#define ROBOT_ROTATE_SPEED          (45)
+#define ROBOT_STRAIGHT_SPEED        (45)
+#define ROBOT_MAX_SPEED             (50)   ///< Max speed in autonomous control mode
+#define ROBOT_REDUCE_SPEED_FACTOR   (0.8)  ///< Reduction factor applied to speed when close to target or error angle is too large
 #define ROBOT_REDUCE_SPEED_ANGLE    (25)   ///< Max angle amplitude where speed reduction factor is applied
 #define ROBOT_ANGULAR_SPEED_FACTOR  (35)   ///< Constant applied to the normalized angle to target error
 #define ROBOT_ANGULAR_SIDE_FACTOR   (-1)   ///< Angular side factor
@@ -285,7 +288,7 @@ static void _compute_angle(const protocol_lh2_location_t *head, const protocol_l
 }
 
 static void _compensate_angle(int16_t angle) {
-    int8_t speed = -45;
+    int8_t speed = ROBOT_ROTATE_SPEED * -1;
 
     if (angle < 0) {
         speed *= -1;
@@ -306,7 +309,7 @@ static void _compensate_initial_direction(void) {
     _compute_angle((const protocol_lh2_location_t *)&ipc_shared_data.target_location, (const protocol_lh2_location_t *)&ipc_shared_data.current_location, &angle_to_target);
     int16_t error_angle = angle_to_target - _control_loop_vars.direction;
     _compensate_angle(error_angle);
-    db_move_straight(50, 50);
+    db_move_straight(ROBOT_STRAIGHT_SPEED, ROBOT_STRAIGHT_SPEED);
     _control_loop_vars.initial_direction_compensated = true;
 }
 
@@ -485,7 +488,7 @@ int main(void) {
     // Periodic Timer and Lighthouse initialization
     db_timer_init(1);
     db_timer_set_periodic_ms(1, 1, LH2_UPDATE_DELAY_MS, &_update_lh2);
-    db_timer_set_periodic_ms(1, 2, 500, &_advertise);
+    db_timer_set_periodic_ms(1, 2, ADVERTIZE_DELAY, &_advertise);
     db_lh2_init(&_bootloader_vars.lh2, &db_lh2_d, &db_lh2_e);
     db_lh2_start();
 #endif
