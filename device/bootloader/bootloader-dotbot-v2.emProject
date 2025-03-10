@@ -1,5 +1,5 @@
 <!DOCTYPE CrossStudio_Project_File>
-<solution Name="Bootloader" version="2" target="8">
+<solution Name="Bootloader DotBot-v2" version="2" target="8">
   <configuration
     LIBRARY_IO_TYPE="RTT"
     Name="Common"
@@ -52,9 +52,6 @@
     linker_printf_width_precision_supported="Yes"
     linker_section_placement_file="Setup/flash_placement.xml"
     macros="BuildTarget=dotbot-v2"
-    project_dependencies="00bsp_pwm(bsp);00bsp_gpio(bsp)"
-    project_directory=""
-    project_type="Executable"
     target_reset_script="Reset();"
     target_script_file="$(ProjectDir)/Setup/nRF_Target.js"
     target_trace_initialize_script="EnableTrace(&quot;$(TraceInterfaceType)&quot;)" />
