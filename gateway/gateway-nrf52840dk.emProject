@@ -1,5 +1,5 @@
 <!DOCTYPE CrossStudio_Project_File>
-<solution Name="Gateway" target="8" version="2">
+<solution Name="Gateway nRF52840DK" target="8" version="2">
   <configuration
     CMSIS_CORE="Yes"
     LIBRARY_IO_TYPE="RTT"
@@ -28,8 +28,8 @@
     build_output_directory="$(ProjectDir)/Output/$(Configuration)/Exe"
     build_treat_warnings_as_errors="Yes"
     c_additional_options="-Wno-missing-field-initializers"
-    c_preprocessor_definitions="ARM_MATH_CM4;NRF52840_XXAA;__nRF_FAMILY;CONFIG_NFCT_PINS_AS_GPIOS;FLASH_PLACEMENT=1"
-    c_user_include_directories="$(PackagesDir)/nRF/Device/Include;$(PackagesDir)/CMSIS_5/CMSIS/Core/Include"
+    c_preprocessor_definitions="ARM_MATH_CM4;NRF52840_XXAA;__nRF_FAMILY;CONFIG_NFCT_PINS_AS_GPIOS;FLASH_PLACEMENT=1;BOARD_NRF52840DK"
+    c_user_include_directories="$(SolutionDir)/../dotbot-firmware/bsp;$(SolutionDir)/../dotbot-firmware/drv;$(PackagesDir)/nRF/Device/Include;$(PackagesDir)/CMSIS_5/CMSIS/Core/Include"
     clang_machine_outliner="Yes"
     compiler_color_diagnostics="Yes"
     debug_register_definition_file="$(PackagesDir)/nRF/XML/nrf52840_Registers.xml"
@@ -51,7 +51,6 @@
     linker_printf_width_precision_supported="Yes"
     linker_section_placement_file="$(ProjectDir)/Setup/flash_placement.xml"
     macros="BuildTarget=nrf52840dk;DeviceLibraryIdentifier=M4lf;DeviceFamily=nRF;Target=nRF52840_xxAA;Placement=Flash"
-    project_type="Executable"
     target_reset_script="Reset();"
     target_script_file="$(ProjectDir)/Setup/nRF_Target.js"
     target_trace_initialize_script="EnableTrace(&quot;$(TraceInterfaceType)&quot;)" />
@@ -67,43 +66,7 @@
     gcc_debugging_level="Level 2"
     gcc_omit_frame_pointer="Yes"
     gcc_optimization_level="Level 2 balanced" />
-  <project Name="Gateway">
-    <configuration
-      Name="Common"
-      project_directory="."
-      project_type="Executable" />
-    <folder Name="Setup">
-      <file file_name="Setup/flash_placement.xml" />
-      <file file_name="Setup/MemoryMap.xml" />
-    </folder>
-    <folder Name="Source">
-      <file file_name="Source/main.c" />
-      <file file_name="Source/board_config.h" />
-      <file file_name="Source/clock.h" />
-      <file file_name="Source/clock.c" />
-      <file file_name="Source/device.h" />
-      <file file_name="Source/gpio.h" />
-      <file file_name="Source/gpio.c" />
-      <file file_name="Source/hdlc.h" />
-      <file file_name="Source/hdlc.c" />
-      <file file_name="Source/protocol.h" />
-      <file file_name="Source/protocol.c" />
-      <file file_name="Source/radio.h" />
-      <file file_name="Source/radio.c" />
-      <file file_name="Source/rng.h" />
-      <file file_name="Source/rng.c" />
-      <file file_name="Source/tdma_server.h" />
-      <file file_name="Source/tdma_server.c" />
-      <file file_name="Source/timer.h" />
-      <file file_name="Source/timer.c" />
-      <file file_name="Source/timer_hf.h" />
-      <file file_name="Source/timer_hf.c" />
-      <file file_name="Source/uart.h" />
-      <file file_name="Source/uart.c" />
-    </folder>
-    <folder Name="System">
-      <file file_name="System/system_init.c" />
-      <file file_name="System/startup.c" />
-    </folder>
-  </project>
+  <import file_name="gateway-app.emProject" />
+  <import file_name="../dotbot-firmware/bsp/bsp.emProject" />
+  <import file_name="../dotbot-firmware/drv/drv.emProject" />
 </solution>
