@@ -73,13 +73,13 @@ typedef struct __attribute__((packed)) {
 } ipc_ota_data_t;
 
 typedef struct __attribute__((packed)) {
-    radio_mode_t              mode;                ///< radio_init function parameters
-    uint8_t                   frequency;           ///< db_set_frequency function parameters
-    tdma_client_table_t       table_set;           ///< db_tdma_client_set_table function parameter
-    tdma_client_table_t       table_get;           ///< db_tdma_client_get_table function parameter
-    ipc_radio_pdu_t           tx_pdu;              ///< PDU to send
-    ipc_radio_pdu_t           rx_pdu;              ///< Received pdu
-    tdma_registration_state_t registration_state;  ///< db_tdma_client_get_status return value
+    db_radio_mode_t                 mode;                ///< radio_init function parameters
+    uint8_t                         frequency;           ///< db_set_frequency function parameters
+    tdma_client_table_t             table_set;           ///< db_tdma_client_set_table function parameter
+    tdma_client_table_t             table_get;           ///< db_tdma_client_get_table function parameter
+    ipc_radio_pdu_t                 tx_pdu;              ///< PDU to send
+    ipc_radio_pdu_t                 rx_pdu;              ///< Received pdu
+    db_tdma_registration_state_t    registration_state;  ///< db_tdma_client_get_status return value
 } ipc_tdma_client_data_t;
 
 typedef struct __attribute__((packed)) {

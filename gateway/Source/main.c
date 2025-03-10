@@ -13,7 +13,7 @@
 #include "tdma_server.h"
 
 //=========================== defines ==========================================
-#define DOTBOT_GW_RADIO_MODE RADIO_BLE_1MBit
+#define DOTBOT_GW_RADIO_MODE DB_RADIO_BLE_1MBit
 #define TIMER_DEV           (1)
 #define BUFFER_MAX_BYTES (255U)       ///< Max bytes in UART receive buffer
 #define UART_BAUDRATE    (1000000UL)  ///< UART baudrate used by the gateway
@@ -83,22 +83,22 @@ static void _led3_shutdown(void) {
 //=========================== main =============================================
 
 int main(void) {
-    hfclk_init();
+    db_hfclk_init();
     _gw_vars.led1_blink = true;
     // Initialize user feedback LEDs
-    db_gpio_init(&db_led1, GPIO_OUT);  // Global status
+    db_gpio_init(&db_led1, DB_GPIO_OUT);  // Global status
     db_gpio_set(&db_led1);
-    timer_init(TIMER_DEV);
-    timer_set_periodic_ms(TIMER_DEV, 0, 50, _led1_blink_fast);
-    timer_set_periodic_ms(TIMER_DEV, 1, 20, _led2_shutdown);
-    timer_set_periodic_ms(TIMER_DEV, 2, 20, _led3_shutdown);
-    db_gpio_init(&db_led2, GPIO_OUT);  // Packet received from Radio (e.g from a DotBot)
+    db_timer_init(TIMER_DEV);
+    db_timer_set_periodic_ms(TIMER_DEV, 0, 50, _led1_blink_fast);
+    db_timer_set_periodic_ms(TIMER_DEV, 1, 20, _led2_shutdown);
+    db_timer_set_periodic_ms(TIMER_DEV, 2, 20, _led3_shutdown);
+    db_gpio_init(&db_led2, DB_GPIO_OUT);  // Packet received from Radio (e.g from a DotBot)
     db_gpio_set(&db_led2);
-    db_gpio_init(&db_led3, GPIO_OUT);  // Packet received from UART (e.g from the computer)
+    db_gpio_init(&db_led3, DB_GPIO_OUT);  // Packet received from UART (e.g from the computer)
     db_gpio_set(&db_led3);
 
     // Configure Radio as transmitter
-    tdma_server_init(&_radio_callback, DOTBOT_GW_RADIO_MODE, RADIO_FREQ);
+    db_tdma_server_init(&_radio_callback, DOTBOT_GW_RADIO_MODE, RADIO_FREQ);
 
     // Initialize the gateway context
     _gw_vars.buttons             = 0x0000;
@@ -107,7 +107,7 @@ int main(void) {
     db_uart_init(UART_INDEX, &db_uart_rx, &db_uart_tx, UART_BAUDRATE, &_uart_callback);
 
     // Initialization done, wait a bit and shutdown status LED
-    timer_delay_s(TIMER_DEV, 1);
+    db_timer_delay_s(TIMER_DEV, 1);
     db_gpio_set(&db_led1);
     _gw_vars.led1_blink = false;
 
@@ -124,15 +124,15 @@ int main(void) {
             db_gpio_clear(&db_led3);
             db_hdlc_state_t hdlc_state = db_hdlc_rx_byte(_gw_vars.uart_queue.buffer[_gw_vars.uart_queue.current]);
             switch ((uint8_t)hdlc_state) {
-                case HDLC_STATE_IDLE:
-                case HDLC_STATE_RECEIVING:
-                case HDLC_STATE_ERROR:
+                case DB_HDLC_STATE_IDLE:
+                case DB_HDLC_STATE_RECEIVING:
+                case DB_HDLC_STATE_ERROR:
                     break;
-                case HDLC_STATE_READY:
+                case DB_HDLC_STATE_READY:
                 {
                     size_t msg_len = db_hdlc_decode(&_gw_vars.hdlc_rx_buffer[0]);
                     if (msg_len) {
-                        tdma_server_tx(&_gw_vars.hdlc_rx_buffer[0], msg_len);
+                        db_tdma_server_tx(&_gw_vars.hdlc_rx_buffer[0], msg_len);
                     }
                 } break;
                 default:
