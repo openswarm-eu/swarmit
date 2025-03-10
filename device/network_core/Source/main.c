@@ -107,7 +107,7 @@ int main(void) {
     NVIC_SetPriority(IPC_IRQn, 1);
 
     // Configure timer used for timestamping events
-    timer_hf_init(NETCORE_MAIN_TIMER);
+    db_timer_hf_init(NETCORE_MAIN_TIMER);
 
     // Network core must remain on
     ipc_shared_data.net_ready = true;
@@ -127,7 +127,7 @@ int main(void) {
                     memcpy(_app_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
                     length += sizeof(uint64_t);
                     _app_vars.notification_buffer[length++] = ipc_shared_data.status;
-                    tdma_client_tx(_app_vars.notification_buffer, length);
+                    db_tdma_client_tx(_app_vars.notification_buffer, length);
                 }   break;
                 case SWRMT_REQUEST_START:
                     if (ipc_shared_data.status != SWRMT_APPLICATION_READY) {
@@ -163,7 +163,7 @@ int main(void) {
 
                     // Initialize computed hash
                     memset(_app_vars.computed_hash, 0, SWRMT_OTA_SHA256_LENGTH);
-                    sha256_init();
+                    crypto_sha256_init();
 
                     // Erase the corresponding flash pages.
                     mutex_lock();
@@ -186,11 +186,11 @@ int main(void) {
                     mutex_unlock();
 
                     // Update computed hash
-                    sha256_update((const uint8_t *)ipc_shared_data.ota.chunk, ipc_shared_data.ota.chunk_size);
+                    crypto_sha256_update((const uint8_t *)ipc_shared_data.ota.chunk, ipc_shared_data.ota.chunk_size);
 
                     // If last chunk, finalize computed hash, compare with expected hash and report to application core via shared memory
                     if (ipc_shared_data.ota.chunk_index == ipc_shared_data.ota.chunk_count - 1) {
-                        sha256_finalize(_app_vars.computed_hash);
+                        crypto_sha256(_app_vars.computed_hash);
                         mutex_lock();
                         ipc_shared_data.ota.hashes_match = !memcmp(_app_vars.computed_hash, _app_vars.expected_hash, SWRMT_OTA_SHA256_LENGTH);
                         mutex_unlock();
@@ -214,31 +214,31 @@ int main(void) {
             switch (_app_vars.ipc_req) {
                 // TDMA Client functions
                 case IPC_TDMA_CLIENT_INIT_REQ:
-                    tdma_client_init(&_handle_packet, ipc_shared_data.tdma_client.mode, ipc_shared_data.tdma_client.frequency);
+                    db_tdma_client_init(&_handle_packet, ipc_shared_data.tdma_client.mode, ipc_shared_data.tdma_client.frequency);
                     break;
                 case IPC_TDMA_CLIENT_SET_TABLE_REQ:
-                    tdma_client_set_table((const tdma_client_table_t *)&ipc_shared_data.tdma_client.table_set);
+                    db_tdma_client_set_table((const tdma_client_table_t *)&ipc_shared_data.tdma_client.table_set);
                     break;
                 case IPC_TDMA_CLIENT_GET_TABLE_REQ:
-                    tdma_client_get_table((tdma_client_table_t *)&ipc_shared_data.tdma_client.table_get);
+                    db_tdma_client_get_table((tdma_client_table_t *)&ipc_shared_data.tdma_client.table_get);
                     break;
                 case IPC_TDMA_CLIENT_TX_REQ:
-                    tdma_client_tx((uint8_t *)ipc_shared_data.tdma_client.tx_pdu.buffer, ipc_shared_data.tdma_client.tx_pdu.length);
+                    db_tdma_client_tx((uint8_t *)ipc_shared_data.tdma_client.tx_pdu.buffer, ipc_shared_data.tdma_client.tx_pdu.length);
                     break;
                 case IPC_TDMA_CLIENT_FLUSH_REQ:
-                    tdma_client_flush();
+                    db_tdma_client_flush();
                     break;
                 case IPC_TDMA_CLIENT_EMPTY_REQ:
-                    tdma_client_empty();
+                    db_tdma_client_empty();
                     break;
                 case IPC_TDMA_CLIENT_STATUS_REQ:
-                    ipc_shared_data.tdma_client.registration_state = tdma_client_get_status();
+                    ipc_shared_data.tdma_client.registration_state = db_tdma_client_get_status();
                     break;
                 case IPC_RNG_INIT_REQ:
-                    rng_init();
+                    db_rng_init();
                     break;
                 case IPC_RNG_READ_REQ:
-                    rng_read((uint8_t *)&ipc_shared_data.rng.value);
+                    db_rng_read((uint8_t *)&ipc_shared_data.rng.value);
                     break;
                 default:
                     break;
@@ -260,12 +260,12 @@ int main(void) {
             uint64_t device_id = _deviceid();
             memcpy(_app_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
             length += sizeof(uint64_t);
-            uint32_t timestamp = timer_hf_now(NETCORE_MAIN_TIMER);
+            uint32_t timestamp = db_timer_hf_now(NETCORE_MAIN_TIMER);
             memcpy(_app_vars.notification_buffer + length, &timestamp, sizeof(uint32_t));
             length += sizeof(uint32_t);
             memcpy(_app_vars.notification_buffer + length, (void *)&ipc_shared_data.log, ipc_shared_data.log.length + 1);
             length += ipc_shared_data.log.length + 1;
-            tdma_client_tx(_app_vars.notification_buffer, length);
+            db_tdma_client_tx(_app_vars.notification_buffer, length);
         }
     };
 }
