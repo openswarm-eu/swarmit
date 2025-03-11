@@ -10,8 +10,18 @@ on:
 
 jobs:
 
-  test:
-    name: test (${{ matrix.os }}, python-${{ matrix.python-version }}
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+      - name: Build applications
+        run: make docker
+
+  testbed-check:
+    name: testbed-check (${{ matrix.os }}, python-${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
