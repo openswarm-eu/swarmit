@@ -1,9 +1,11 @@
  # SwarmIT
 
- SwarmIT provides a embedded C port for nRF53 as well as Python based services to
- easily build and deploy a robotic swarm infrastructure testbed.
- ARM TrustZone is used to create a sandboxed user environment on each device
- under test, without requiring a control co-processor attached to it.
+SwarmIT provides a embedded C port for nRF53 as well as Python based services to
+easily build and deploy a robotic swarm infrastructure testbed.
+ARM TrustZone is used to create a sandboxed user environment on each device
+under test, without requiring a control co-processor attached to it.
+
+https://github.com/user-attachments/assets/c3a54718-0da4-4107-b764-3fe0d6127897
 
 ## Features
 
