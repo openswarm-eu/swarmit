@@ -5,7 +5,7 @@ easily build and deploy a robotic swarm infrastructure testbed.
 ARM TrustZone is used to create a sandboxed user environment on each device
 under test, without requiring a control co-processor attached to it.
 
-https://github.com/user-attachments/assets/c3a54718-0da4-4107-b764-3fe0d6127897
+https://github.com/user-attachments/assets/eff63b07-216a-41fb-9062-2e0e56f03c20
 
 ## Features
 
