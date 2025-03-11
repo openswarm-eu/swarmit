@@ -1,6 +1,6 @@
 <!DOCTYPE CrossStudio_Project_File>
 <solution Name="Gateway" target="8" version="2">
-  <project Name="Gateway">
+  <project Name="gateway">
     <configuration
       Name="Common"
       project_dependencies="00bsp_radio(bsp);00bsp_rng(bsp);00bsp_timer(bsp);00bsp_timer_hf(bsp);00bsp_uart(bsp);00drv_dotbot_hdlc(drv);00drv_protocol(drv);00drv_tdma_server(drv)"
