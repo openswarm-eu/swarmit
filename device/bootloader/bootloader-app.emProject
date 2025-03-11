@@ -1,6 +1,6 @@
 <!DOCTYPE CrossStudio_Project_File>
 <solution Name="Bootloader" target="8" version="2">
-  <project Name="Bootloader">
+  <project Name="bootloader">
     <configuration
       Name="Common"
       project_dependencies="00bsp_dotbot_lh2(bsp);00drv_move(drv);00bsp_timer_hf(bsp);00bsp_pwm(bsp);00bsp_gpio(bsp)"
