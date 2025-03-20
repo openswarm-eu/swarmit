@@ -66,15 +66,19 @@ static void _uart_callback(uint8_t data) {
 void blink_event_callback(bl_event_t event, bl_event_data_t event_data) {
     switch (event) {
         case BLINK_NEW_PACKET:
-            printf("Blink packet (%d B): ", event_data.data.new_packet.length);
-            for (int i = 0; i < event_data.data.new_packet.length; i++) {
-                printf("%02X ", event_data.data.new_packet.packet[i]);
+        {
+            blink_packet_t packet = event_data.data.new_packet;
+            printf("Blink packet (%d B): src=%016llX dst=%016llX payload=", packet.len, packet.header->src, packet.header->dst);
+            for (int i = 0; i < packet.payload_len; i++) {
+                printf("%02X ", packet.payload[i]);
             }
             printf("\n");
-            memcpy(_gw_vars.radio_queue.packets[_gw_vars.radio_queue.last].buffer, event_data.data.new_packet.packet, event_data.data.new_packet.length);
-            _gw_vars.radio_queue.packets[_gw_vars.radio_queue.last].length = event_data.data.new_packet.length;
+            memcpy(_gw_vars.radio_queue.packets[_gw_vars.radio_queue.last].buffer, packet.header, sizeof(bl_packet_header_t));
+            memcpy(_gw_vars.radio_queue.packets[_gw_vars.radio_queue.last].buffer + sizeof(bl_packet_header_t), packet.payload, packet.payload_len);
+            _gw_vars.radio_queue.packets[_gw_vars.radio_queue.last].length = sizeof(bl_packet_header_t) + packet.payload_len;
             _gw_vars.radio_queue.last                                      = (_gw_vars.radio_queue.last + 1) & (RADIO_QUEUE_SIZE - 1);
             break;
+        }
         case BLINK_NODE_JOINED:
             printf("New node joined: %016llX\n", event_data.data.node_info.node_id);
             uint64_t joined_nodes[BLINK_MAX_NODES] = { 0 };

@@ -51,7 +51,7 @@ volatile __attribute__((section(".shared_data"))) ipc_shared_data_t ipc_shared_d
 //=========================== functions =========================================
 
 static void _handle_packet(uint8_t *packet, uint8_t length) {
-    memcpy(_app_vars.req_buffer, packet + sizeof(protocol_header_t), length - sizeof(protocol_header_t));
+    memcpy(_app_vars.req_buffer, packet, length);
     uint8_t *ptr = _app_vars.req_buffer;
     uint8_t packet_type = (uint8_t)*ptr++;
     if ((packet_type >= SWRMT_REQUEST_STATUS) && (packet_type <= SWRMT_REQUEST_OTA_CHUNK)) {
@@ -88,8 +88,11 @@ static void _handle_packet(uint8_t *packet, uint8_t length) {
 static void blink_event_callback(bl_event_t event, bl_event_data_t event_data) {
     switch (event) {
         case BLINK_NEW_PACKET:
-            _handle_packet(event_data.data.new_packet.packet, event_data.data.new_packet.length);
+        {
+            blink_packet_t packet = event_data.data.new_packet;
+            _handle_packet(packet.payload, packet.payload_len);
             break;
+        }
         case BLINK_CONNECTED: {
             uint64_t gateway_id = event_data.data.gateway_info.gateway_id;
             printf("Connected to gateway %016llX\n", gateway_id);
@@ -154,7 +157,7 @@ int main(void) {
                     memcpy(_app_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
                     length += sizeof(uint64_t);
                     _app_vars.notification_buffer[length++] = ipc_shared_data.status;
-                    blink_node_tx(_app_vars.notification_buffer, length);
+                    blink_node_tx_payload(_app_vars.notification_buffer, length);
                 }   break;
                 case SWRMT_REQUEST_START:
                     if (ipc_shared_data.status != SWRMT_APPLICATION_READY) {
@@ -244,7 +247,7 @@ int main(void) {
                     blink_init(BLINK_NODE, &schedule_minuscule, &blink_event_callback);
                     break;
                 case IPC_BLINK_NODE_TX_REQ:
-                    blink_node_tx((uint8_t *)ipc_shared_data.tx_pdu.buffer, ipc_shared_data.tx_pdu.length);
+                    blink_node_tx_payload((uint8_t *)ipc_shared_data.tx_pdu.buffer, ipc_shared_data.tx_pdu.length);
                     break;
                 case IPC_RNG_INIT_REQ:
                     db_rng_init();
@@ -277,7 +280,7 @@ int main(void) {
             length += sizeof(uint32_t);
             memcpy(_app_vars.notification_buffer + length, (void *)&ipc_shared_data.log, ipc_shared_data.log.length + 1);
             length += ipc_shared_data.log.length + 1;
-            blink_node_tx(_app_vars.notification_buffer, length);
+            blink_node_tx_payload(_app_vars.notification_buffer, length);
         }
     };
 }
