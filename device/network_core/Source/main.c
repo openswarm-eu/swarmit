@@ -89,8 +89,7 @@ static void blink_event_callback(bl_event_t event, bl_event_data_t event_data) {
     switch (event) {
         case BLINK_NEW_PACKET:
         {
-            blink_packet_t packet = event_data.data.new_packet;
-            _handle_packet(packet.payload, packet.payload_len);
+            _handle_packet(event_data.data.new_packet.payload, event_data.data.new_packet.payload_len);
             break;
         }
         case BLINK_CONNECTED: {
@@ -158,17 +157,20 @@ int main(void) {
                     length += sizeof(uint64_t);
                     _app_vars.notification_buffer[length++] = ipc_shared_data.status;
                     blink_node_tx_payload(_app_vars.notification_buffer, length);
+                    printf("Replying to status request (status: %d)\n", ipc_shared_data.status);
                 }   break;
                 case SWRMT_REQUEST_START:
                     if (ipc_shared_data.status != SWRMT_APPLICATION_READY) {
                         break;
                     }
+                    puts("Start request received");
                     NRF_IPC_NS->TASKS_SEND[IPC_CHAN_APPLICATION_START] = 1;
                     break;
                 case SWRMT_REQUEST_STOP:
                     if ((ipc_shared_data.status != SWRMT_APPLICATION_RUNNING) && (ipc_shared_data.status != SWRMT_APPLICATION_RESETTING)) {
                         break;
                     }
+                    puts("Stop request received");
                     ipc_shared_data.status = SWRMT_APPLICATION_STOPPING;
                     NRF_IPC_NS->TASKS_SEND[IPC_CHAN_APPLICATION_STOP] = 1;
                     break;
@@ -179,6 +181,7 @@ int main(void) {
 #if defined(USE_LH2)
                     memcpy((uint8_t *)&ipc_shared_data.target_location, req->data, sizeof(protocol_lh2_location_t));
 #endif
+                    puts("Reset request received");
                     ipc_shared_data.status = SWRMT_APPLICATION_RESETTING;
                     //NRF_IPC_NS->TASKS_SEND[IPC_CHAN_APPLICATION_RESET] = 1;
                     break;
@@ -201,6 +204,7 @@ int main(void) {
                     ipc_shared_data.ota.chunk_count = pkt->chunk_count;
                     ipc_shared_data.ota.hashes_match = 0;
                     mutex_unlock();
+                    printf("OTA Start request received (size: %u, chunks: %u)\n", ipc_shared_data.ota.image_size, ipc_shared_data.ota.chunk_count);
                     NRF_IPC_NS->TASKS_SEND[IPC_CHAN_OTA_START] = 1;
                 } break;
                 case SWRMT_REQUEST_OTA_CHUNK:
@@ -218,6 +222,7 @@ int main(void) {
                     // Update computed hash
                     crypto_sha256_update((const uint8_t *)ipc_shared_data.ota.chunk, ipc_shared_data.ota.chunk_size);
 
+                    printf("OTA chunk request received (index: %u, size: %u)\n", ipc_shared_data.ota.chunk_index, ipc_shared_data.ota.chunk_size);
                     // If last chunk, finalize computed hash, compare with expected hash and report to application core via shared memory
                     if (ipc_shared_data.ota.chunk_index == ipc_shared_data.ota.chunk_count - 1) {
                         crypto_sha256(_app_vars.computed_hash);
