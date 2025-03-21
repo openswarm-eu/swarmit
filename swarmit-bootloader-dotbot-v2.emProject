@@ -46,7 +46,7 @@
     linker_additional_options="--gc-sections"
     linker_memory_map_file="$(ProjectDir)/Setup/MemoryMap.xml"
     linker_output_format="hex"
-    linker_post_build_command="cp $(ProjectDir)/Output/$(BuildTarget)/$(Configuration)/Exe/cmse_implib.a $(ProjectDir)/../../sample/."
+    linker_post_build_command="cp $(ProjectDir)/Output/$(BuildTarget)/$(Configuration)/Exe/cmse_implib.a $(SolutionDir)/../../sample/."
     linker_printf_fmt_level="int"
     linker_printf_fp_enabled="Float"
     linker_printf_width_precision_supported="Yes"
@@ -67,7 +67,8 @@
     gcc_debugging_level="Level 2"
     gcc_omit_frame_pointer="Yes"
     gcc_optimization_level="Level 2 balanced" />
-  <import file_name="bootloader-app.emProject" />
-  <import file_name="../../dotbot-firmware/bsp/bsp.emProject" />
-  <import file_name="../../dotbot-firmware/drv/drv.emProject" />
+  <import file_name="device/bootloader/bootloader-app.emProject" />
+  <import file_name="dotbot-firmware/bsp/bsp.emProject" />
+  <import file_name="dotbot-firmware/crypto/crypto.emProject" />
+  <import file_name="dotbot-firmware/drv/drv.emProject" />
 </solution>
