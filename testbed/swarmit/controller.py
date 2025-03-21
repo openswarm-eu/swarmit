@@ -376,7 +376,7 @@ class Controller:
         frame = Frame(header=Header(), payload=payload)
         self.expected_reply = SwarmitPayloadType.SWARMIT_NOTIFICATION_STATUS
         self.send_frame(frame)
-        wait_for_done(1, lambda: False)
+        wait_for_done(2, lambda: False)
         return self.status_data
 
     def _send_start(self, device_id: str):

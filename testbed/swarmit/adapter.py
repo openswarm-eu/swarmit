@@ -36,15 +36,19 @@ class SerialAdapter(GatewayAdapterBase):
     def on_byte_received(self, byte):
         self.hdlc_handler.handle_byte(byte)
         if self.hdlc_handler.state == HDLCState.READY:
-            self.on_data_received(self.hdlc_handler.payload)
+            try:
+                payload = self.hdlc_handler.payload
+                print(payload)
+                self.on_data_received(payload)
+            except:
+                pass
 
     def init(self, on_data_received: callable):
         self.serial = SerialInterface(
             self.port, self.baudrate, self.on_byte_received
         )
         self.on_data_received = on_data_received
-        # Just write a single byte to fake a DotBot gateway handshake
-        self.serial.write(int(PROTOCOL_VERSION).to_bytes(length=1))
+        self.serial.serial.flush()
 
     def close(self):
         self.serial.stop()
