@@ -252,6 +252,7 @@ int main(void) {
                     blink_init(BLINK_NODE, &schedule_minuscule, &blink_event_callback);
                     break;
                 case IPC_BLINK_NODE_TX_REQ:
+                    while (!blink_node_is_connected()) {}
                     blink_node_tx_payload((uint8_t *)ipc_shared_data.tx_pdu.buffer, ipc_shared_data.tx_pdu.length);
                     break;
                 case IPC_RNG_INIT_REQ:
