@@ -67,15 +67,9 @@ void blink_event_callback(bl_event_t event, bl_event_data_t event_data) {
     switch (event) {
         case BLINK_NEW_PACKET:
         {
-            blink_packet_t packet = event_data.data.new_packet;
-            printf("Blink packet (%d B): src=%016llX dst=%016llX payload=", packet.len, packet.header->src, packet.header->dst);
-            for (int i = 0; i < packet.payload_len; i++) {
-                printf("%02X ", packet.payload[i]);
-            }
-            printf("\n");
-            memcpy(_gw_vars.radio_queue.packets[_gw_vars.radio_queue.last].buffer, packet.header, sizeof(bl_packet_header_t));
-            memcpy(_gw_vars.radio_queue.packets[_gw_vars.radio_queue.last].buffer + sizeof(bl_packet_header_t), packet.payload, packet.payload_len);
-            _gw_vars.radio_queue.packets[_gw_vars.radio_queue.last].length = sizeof(bl_packet_header_t) + packet.payload_len;
+            memcpy(_gw_vars.radio_queue.packets[_gw_vars.radio_queue.last].buffer, event_data.data.new_packet.header, sizeof(bl_packet_header_t));
+            memcpy(_gw_vars.radio_queue.packets[_gw_vars.radio_queue.last].buffer + sizeof(bl_packet_header_t), event_data.data.new_packet.payload, event_data.data.new_packet.payload_len);
+            _gw_vars.radio_queue.packets[_gw_vars.radio_queue.last].length = sizeof(bl_packet_header_t) + event_data.data.new_packet.payload_len;
             _gw_vars.radio_queue.last                                      = (_gw_vars.radio_queue.last + 1) & (RADIO_QUEUE_SIZE - 1);
             break;
         }
@@ -148,6 +142,11 @@ int main(void) {
         while (_gw_vars.radio_queue.current != _gw_vars.radio_queue.last) {
             db_gpio_clear(&db_led2);
             size_t frame_len = db_hdlc_encode(_gw_vars.radio_queue.packets[_gw_vars.radio_queue.current].buffer, _gw_vars.radio_queue.packets[_gw_vars.radio_queue.current].length, _gw_vars.hdlc_tx_buffer);
+            printf("Radio packet received (%d B): payload=", _gw_vars.radio_queue.packets[_gw_vars.radio_queue.current].length);
+            for (int i = 0; i < _gw_vars.radio_queue.packets[_gw_vars.radio_queue.current].length; i++) {
+                printf("%02X ", _gw_vars.radio_queue.packets[_gw_vars.radio_queue.current].buffer[i]);
+            }
+            printf("\n");
             db_uart_write(UART_INDEX, _gw_vars.hdlc_tx_buffer, frame_len);
             _gw_vars.radio_queue.current = (_gw_vars.radio_queue.current + 1) & (RADIO_QUEUE_SIZE - 1);
         }
@@ -163,19 +162,19 @@ int main(void) {
                 case DB_HDLC_STATE_READY:
                 {
                     size_t msg_len = db_hdlc_decode(_gw_vars.hdlc_rx_buffer);
-
                     bl_packet_header_t *header = (bl_packet_header_t *)_gw_vars.hdlc_rx_buffer;
-                    uint8_t *payload = _gw_vars.hdlc_rx_buffer + sizeof(bl_packet_header_t);
-
                     header->dst = BLINK_BROADCAST_ADDRESS;
                     header->src = db_device_id();
                     header->version = BLINK_PROTOCOL_VERSION;
                     header->type = BLINK_PACKET_DATA;
-
                     memcpy(_gw_vars.hdlc_rx_buffer, header, sizeof(bl_packet_header_t));
-                    memcpy(_gw_vars.hdlc_rx_buffer + sizeof(bl_packet_header_t), payload, msg_len - sizeof(bl_packet_header_t));
 
                     if (msg_len) {
+                        printf("UART packet received (%d B): payload=", msg_len);
+                        for (size_t i = 0; i < msg_len; i++) {
+                            printf("%02X ", _gw_vars.hdlc_rx_buffer[i]);
+                        }
+                        printf("\n");
                         blink_tx(_gw_vars.hdlc_rx_buffer, msg_len);
                     }
                 } break;
