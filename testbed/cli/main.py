@@ -76,7 +76,7 @@ def main(ctx, port, baudrate, edge, devices):
     "-v",
     "--verbose",
     is_flag=True,
-    help="Print start result.",
+    help="Enable verbose mode.",
 )
 @click.pass_context
 def start(ctx, verbose):
@@ -89,6 +89,7 @@ def start(ctx, verbose):
             mqtt_port=8883,
             edge=ctx.obj["edge"],
             devices=list(ctx.obj["devices"]),
+            verbose=verbose,
         )
         controller = Controller(settings)
     except (
@@ -121,7 +122,7 @@ def start(ctx, verbose):
     "-v",
     "--verbose",
     is_flag=True,
-    help="Print start result.",
+    help="Enable verbose mode.",
 )
 @click.pass_context
 def stop(ctx, verbose):
@@ -134,6 +135,7 @@ def stop(ctx, verbose):
             mqtt_port=8883,
             edge=ctx.obj["edge"],
             devices=list(ctx.obj["devices"]),
+            verbose=verbose,
         )
         controller = Controller(settings)
     except (
@@ -166,7 +168,7 @@ def stop(ctx, verbose):
                 )
             )
     else:
-        print("No device to stop")
+        print("[bold]No device to stop[/]")
     controller.terminate()
 
 
@@ -175,8 +177,14 @@ def stop(ctx, verbose):
     "locations",
     type=str,
 )
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="Enable verbose mode.",
+)
 @click.pass_context
-def reset(ctx, locations):
+def reset(ctx, locations, verbose):
     """Reset robots locations.
 
     Locations are provided as '<device_id>:<x>,<y>-<device_id>:<x>,<y>|...'
@@ -203,6 +211,7 @@ def reset(ctx, locations):
             mqtt_port=8883,
             edge=ctx.obj["edge"],
             devices=list(ctx.obj["devices"]),
+            verbose=verbose,
         )
         controller = Controller(settings)
     except (
@@ -236,7 +245,7 @@ def reset(ctx, locations):
     "-v",
     "--verbose",
     is_flag=True,
-    help="Print transfer data.",
+    help="Enable verbose mode.",
 )
 @click.argument("firmware", type=click.File(mode="rb"), required=False)
 @click.pass_context
@@ -255,6 +264,7 @@ def flash(ctx, yes, start, verbose, firmware):
         mqtt_port=8883,
         edge=ctx.obj["edge"],
         devices=ctx.obj["devices"],
+        verbose=verbose,
     )
     controller = Controller(settings)
     if not controller.ready_devices:
@@ -289,8 +299,6 @@ def flash(ctx, yes, start, verbose, firmware):
     data = controller.transfer(fw)
     print(f"Elapsed: [bold cyan]{time.time() - start_time:.3f}s[/bold cyan]")
     print_transfer_status(data, start_data)
-    if verbose:
-        pprint(data)
     if not all([value.hashes_match for value in data.values()]):
         controller.terminate()
         console = Console()
@@ -336,8 +344,14 @@ def monitor(ctx):
 
 
 @main.command()
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="Enable verbose mode.",
+)
 @click.pass_context
-def status(ctx):
+def status(ctx, verbose):
     """Print current status of the robots."""
     settings = ControllerSettings(
         serial_port=ctx.obj["port"],
@@ -346,6 +360,7 @@ def status(ctx):
         mqtt_port=8883,
         edge=ctx.obj["edge"],
         devices=ctx.obj["devices"],
+        verbose=verbose,
     )
     controller = Controller(settings)
     data = controller.status()

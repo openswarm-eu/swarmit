@@ -5,8 +5,8 @@ from abc import ABC, abstractmethod
 
 import paho.mqtt.client as mqtt
 from dotbot.hdlc import HDLCHandler, HDLCState, hdlc_encode
-from dotbot.protocol import PROTOCOL_VERSION
 from dotbot.serial_interface import SerialInterface
+from rich import print
 
 
 class GatewayAdapterBase(ABC):
@@ -38,7 +38,6 @@ class SerialAdapter(GatewayAdapterBase):
         if self.hdlc_handler.state == HDLCState.READY:
             try:
                 payload = self.hdlc_handler.payload
-                print(payload)
                 self.on_data_received(payload)
             except:
                 pass
@@ -48,9 +47,13 @@ class SerialAdapter(GatewayAdapterBase):
             self.port, self.baudrate, self.on_byte_received
         )
         self.on_data_received = on_data_received
+        print("[yellow]Connecting to gateway...[/]")
         self.serial.serial.flush()
+        self.serial.write(hdlc_encode(b"\x01\xff"))
 
     def close(self):
+        print("[yellow]Disconnect from gateway...[/]")
+        self.serial.write(hdlc_encode(b"\x01\xfe"))
         self.serial.stop()
 
     def send_data(self, data):
@@ -72,7 +75,7 @@ class MQTTAdapter(GatewayAdapterBase):
         print(messages)
 
     def on_connect(self, client, userdata, flags, reason_code, properties):
-        self.client.subscribe("/pydotbot/edge_to_controller")
+        self.client.subscribe("/pydotbot/edge_to_controller", qos=1)
 
     def init(self, on_data_received: callable):
         self.on_data_received = on_data_received
@@ -95,4 +98,5 @@ class MQTTAdapter(GatewayAdapterBase):
         self.client.publish(
             "/pydotbot/controller_to_edge",
             base64.b64encode(data).decode(),
+            qos=1,
         )

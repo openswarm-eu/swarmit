@@ -14,6 +14,7 @@ class StatusType(Enum):
     Running = 1
     Stopping = 2
     Resetting = 3
+    Programming = 4
 
 
 class SwarmitPayloadType(IntEnum):
