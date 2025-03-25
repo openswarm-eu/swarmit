@@ -31,7 +31,7 @@
 
 #define SWARMIT_BASE_ADDRESS        (0x8000)
 
-#define ADVERTIZE_DELAY             (2000U)
+#define ADVERTIZE_DELAY             (500U)
 #define LH2_UPDATE_DELAY_MS         (250U) ///< 100ms delay between each LH2 data refresh
 
 #define ROBOT_DISTANCE_THRESHOLD    (0.05)
@@ -52,7 +52,6 @@ typedef struct {
     bool        ota_start_request;
     bool        ota_chunk_request;
     bool        start_application;
-    //bool        reset_application;
 #if defined(USE_LH2)
     db_lh2_t    lh2;
     bool        lh2_location;
@@ -545,7 +544,7 @@ int main(void) {
         }
 
 #if defined(USE_LH2)
-        if (_bootloader_vars.advertise) {
+        if (_bootloader_vars.advertise && ipc_shared_data.status != SWRMT_APPLICATION_PROGRAMMING) {
             db_gpio_toggle(&_status_led);
             size_t length = db_protocol_advertizement_to_buffer(_bootloader_vars.notification_buffer, DotBot);
             blink_node_tx(_bootloader_vars.notification_buffer, length);
@@ -595,7 +594,6 @@ int main(void) {
                 _control_loop_vars.final_direction_compensated = false;
                 _control_loop_vars.lh2_previous_location.x = 0;
                 _control_loop_vars.lh2_previous_location.y = 0;
-                //NRF_WDT1_S->TASKS_START = WDT_TASKS_START_TASKS_START_Trigger << WDT_TASKS_START_TASKS_START_Pos;
             }
 
             _bootloader_vars.lh2_location = false;
@@ -622,11 +620,6 @@ void IPC_IRQHandler(void) {
         NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_APPLICATION_START] = 0;
         _bootloader_vars.start_application = true;
     }
-
-    //if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_APPLICATION_RESET]) {
-    //    NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_APPLICATION_RESET] = 0;
-    //    _bootloader_vars.reset_application = true;
-    //}
 
 #if defined(USE_LH2)
     if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_LH2_LOCATION]) {

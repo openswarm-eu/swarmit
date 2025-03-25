@@ -37,6 +37,7 @@ typedef enum {
     SWRMT_APPLICATION_RUNNING,
     SWRMT_APPLICATION_STOPPING,
     SWRMT_APPLICATION_RESETTING,
+    SWRMT_APPLICATION_PROGRAMMING,
 } swrmt_application_status_t;
 
 typedef enum {
