@@ -167,7 +167,7 @@ int main(void) {
                     NRF_IPC_NS->TASKS_SEND[IPC_CHAN_APPLICATION_START] = 1;
                     break;
                 case SWRMT_REQUEST_STOP:
-                    if ((ipc_shared_data.status != SWRMT_APPLICATION_RUNNING) && (ipc_shared_data.status != SWRMT_APPLICATION_RESETTING)) {
+                    if ((ipc_shared_data.status != SWRMT_APPLICATION_RUNNING) && (ipc_shared_data.status != SWRMT_APPLICATION_RESETTING) && (ipc_shared_data.status != SWRMT_APPLICATION_PROGRAMMING)) {
                         break;
                     }
                     puts("Stop request received");
@@ -187,9 +187,10 @@ int main(void) {
                     break;
                 case SWRMT_REQUEST_OTA_START:
                 {
-                    if (ipc_shared_data.status != SWRMT_APPLICATION_READY) {
+                    if (ipc_shared_data.status != SWRMT_APPLICATION_READY || ipc_shared_data.status == SWRMT_APPLICATION_PROGRAMMING) {
                         break;
                     }
+                    ipc_shared_data.status = SWRMT_APPLICATION_PROGRAMMING;
                     const swrmt_ota_start_pkt_t *pkt = (const swrmt_ota_start_pkt_t *)req->data;
                     // Copy expected hash
                     memcpy(_app_vars.expected_hash, pkt->hash, SWRMT_OTA_SHA256_LENGTH);
@@ -209,7 +210,7 @@ int main(void) {
                 } break;
                 case SWRMT_REQUEST_OTA_CHUNK:
                 {
-                    if (ipc_shared_data.status != SWRMT_APPLICATION_READY) {
+                    if (ipc_shared_data.status != SWRMT_APPLICATION_PROGRAMMING) {
                         break;
                     }
                     const swrmt_ota_chunk_pkt_t *pkt = (const swrmt_ota_chunk_pkt_t *)req->data;
@@ -228,6 +229,7 @@ int main(void) {
                         crypto_sha256(_app_vars.computed_hash);
                         mutex_lock();
                         ipc_shared_data.ota.hashes_match = !memcmp(_app_vars.computed_hash, _app_vars.expected_hash, SWRMT_OTA_SHA256_LENGTH);
+                        ipc_shared_data.status = SWRMT_APPLICATION_READY;
                         mutex_unlock();
                     }
 
