@@ -49,6 +49,7 @@ typedef struct {
     gateway_radio_packet_queue_t radio_queue;                              ///< Queue used to process received radio packets outside of interrupt
     gateway_uart_queue_t         uart_queue;                               ///< Queue used to process received UART bytes outside of interrupt
     bool                         led1_blink;                               ///< Whether the status LED should blink
+    bool                         client_connected;
 } gateway_vars_t;
 
 //=========================== variables ========================================
@@ -147,7 +148,9 @@ int main(void) {
                 printf("%02X ", _gw_vars.radio_queue.packets[_gw_vars.radio_queue.current].buffer[i]);
             }
             printf("\n");
-            db_uart_write(UART_INDEX, _gw_vars.hdlc_tx_buffer, frame_len);
+            if (_gw_vars.client_connected) {
+                db_uart_write(UART_INDEX, _gw_vars.hdlc_tx_buffer, frame_len);
+            }
             _gw_vars.radio_queue.current = (_gw_vars.radio_queue.current + 1) & (RADIO_QUEUE_SIZE - 1);
         }
 
@@ -162,14 +165,23 @@ int main(void) {
                 case DB_HDLC_STATE_READY:
                 {
                     size_t msg_len = db_hdlc_decode(_gw_vars.hdlc_rx_buffer);
-                    bl_packet_header_t *header = (bl_packet_header_t *)_gw_vars.hdlc_rx_buffer;
-                    header->dst = BLINK_BROADCAST_ADDRESS;
-                    header->src = db_device_id();
-                    header->version = BLINK_PROTOCOL_VERSION;
-                    header->type = BLINK_PACKET_DATA;
-                    memcpy(_gw_vars.hdlc_rx_buffer, header, sizeof(bl_packet_header_t));
-
                     if (msg_len) {
+                        if (!_gw_vars.client_connected && _gw_vars.hdlc_rx_buffer[1] == 0xff) {
+                            _gw_vars.client_connected = true;
+                            puts("UART client connected");
+                            break;
+                        }
+                        if (_gw_vars.client_connected && _gw_vars.hdlc_rx_buffer[1] == 0xfe) {
+                            _gw_vars.client_connected = false;
+                            puts("UART client disconnected");
+                            break;
+                        }
+                        bl_packet_header_t *header = (bl_packet_header_t *)_gw_vars.hdlc_rx_buffer;
+                        header->dst = BLINK_BROADCAST_ADDRESS;
+                        header->src = db_device_id();
+                        header->version = BLINK_PROTOCOL_VERSION;
+                        header->type = BLINK_PACKET_DATA;
+                        memcpy(_gw_vars.hdlc_rx_buffer, header, sizeof(bl_packet_header_t));
                         printf("UART packet received (%d B): payload=", msg_len);
                         for (size_t i = 0; i < msg_len; i++) {
                             printf("%02X ", _gw_vars.hdlc_rx_buffer[i]);
