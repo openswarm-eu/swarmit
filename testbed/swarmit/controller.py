@@ -34,6 +34,7 @@ from testbed.swarmit.protocol import (
 )
 
 CHUNK_SIZE = 128
+OTA_CHUNK_MAX_RETRIES = 5
 SERIAL_PORT_DEFAULT = get_default_port()
 
 
@@ -535,9 +536,8 @@ class Controller:
 
         send_time = time.time()
         send = True
-        # timeout = False
-        # tries = 0
-        while not is_chunk_acknowledged():
+        retries = 0
+        while not is_chunk_acknowledged() and retries <= OTA_CHUNK_MAX_RETRIES:
             if send is True:
                 payload = PayloadOTAChunkRequest(
                     device_id=int(device_id, base=16),
@@ -547,9 +547,9 @@ class Controller:
                 )
                 self.send_frame(Frame(header=Header(), payload=payload))
                 send_time = time.time()
-            time.sleep(0.04)
-            send = time.time() - send_time > 2
-            # timeout = time.time() - send_time > 5
+                retries += 1
+            time.sleep(0.001)
+            send = time.time() - send_time > 0.5
 
     def transfer(self, firmware):
         """Transfer the firmware to the devices."""
