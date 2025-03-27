@@ -31,7 +31,7 @@
 
 #define SWARMIT_BASE_ADDRESS        (0x8000)
 
-#define ADVERTIZE_DELAY             (500U)
+#define ADVERTIZE_DELAY             (1000U)
 #define LH2_UPDATE_DELAY_MS         (250U) ///< 100ms delay between each LH2 data refresh
 
 #define ROBOT_DISTANCE_THRESHOLD    (0.05)
