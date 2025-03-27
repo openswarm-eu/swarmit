@@ -57,10 +57,23 @@ class StartOtaData:
 
 
 @dataclass
+class Chunk:
+    """Class that holds chunk status."""
+
+    index: str = "0"
+    size: str = "0B"
+    acked: int = 0
+    retries: int = 0
+
+    def __repr__(self):
+        return f"{dataclasses.asdict(self)}"
+
+
+@dataclass
 class TransferDataStatus:
     """Class that holds transfer data status for a single device."""
 
-    chunks_acked: set[int] = dataclasses.field(default_factory=lambda: set())
+    chunks: list[Chunk] = dataclasses.field(default_factory=lambda: [])
     hashes_match: bool = False
 
 
@@ -154,7 +167,7 @@ def print_transfer_status(
             )
             transfer_status_table.add_row(
                 f"{device_id}",
-                f"{len(status.chunks_acked)}/{start_data.chunks}",
+                f"{len([chunk for chunk in status.chunks if bool(chunk.acked)])}/{start_data.chunks}",
                 f"{start_marker}{bool(status.hashes_match)}{stop_marker}",
             )
 
@@ -316,12 +329,16 @@ class Controller:
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_CHUNK_ACK
         ):
             if (
-                frame.payload.index
-                not in self.transfer_data[device_id].chunks_acked
-            ):
-                self.transfer_data[device_id].chunks_acked.add(
-                    frame.payload.index
+                bool(
+                    self.transfer_data[device_id]
+                    .chunks[frame.payload.index]
+                    .acked
                 )
+                is False
+            ):
+                self.transfer_data[device_id].chunks[
+                    frame.payload.index
+                ].acked = 1
             self.transfer_data[device_id].hashes_match = (
                 frame.payload.hashes_match
             )
@@ -523,15 +540,14 @@ class Controller:
                     self.ready_devices
                 ) and all(
                     [
-                        chunk.index in status.chunks_acked
+                        status.chunks[chunk.index].acked
                         for status in self.transfer_data.values()
                     ]
                 )
             else:
                 return (
                     device_id in self.transfer_data.keys()
-                    and chunk.index
-                    in self.transfer_data[device_id].chunks_acked
+                    and self.transfer_data[device_id].chunks[chunk.index].acked
                 )
 
         send_time = time.time()
@@ -546,6 +562,15 @@ class Controller:
                     chunk=chunk.data,
                 )
                 self.send_frame(Frame(header=Header(), payload=payload))
+                if device_id == "0":
+                    for device in self.ready_devices:
+                        self.transfer_data[device].chunks[
+                            chunk.index
+                        ].retries = retries
+                else:
+                    self.transfer_data[device_id].chunks[
+                        chunk.index
+                    ].retries = retries
                 send_time = time.time()
                 retries += 1
             time.sleep(0.001)
@@ -565,14 +590,15 @@ class Controller:
             f"Loading firmware ({int(data_size / 1024)}kB)"
         )
         self.transfer_data = {}
-        if not self.settings.devices:
-            for device_id in self.ready_devices:
-                self.transfer_data[device_id] = TransferDataStatus()
-                self.transfer_data[device_id].retries = [0] * len(self.chunks)
-        else:
-            for device_id in self.settings.devices:
-                self.transfer_data[device_id] = TransferDataStatus()
-                self.transfer_data[device_id].retries = [0] * len(self.chunks)
+        devices = self.settings.devices
+        if not devices:
+            devices = self.ready_devices
+        for device_id in devices:
+            self.transfer_data[device_id] = TransferDataStatus()
+            self.transfer_data[device_id].chunks = [
+                Chunk(index=f"{i:03d}", size=f"{self.chunks[i].size:03d}B")
+                for i in range(len(self.chunks))
+            ]
         for chunk in self.chunks:
             if not self.settings.devices:
                 self.send_chunk(chunk, "0")

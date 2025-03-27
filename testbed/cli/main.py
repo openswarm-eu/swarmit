@@ -299,6 +299,9 @@ def flash(ctx, yes, start, verbose, firmware):
     data = controller.transfer(fw)
     print(f"Elapsed: [bold cyan]{time.time() - start_time:.3f}s[/bold cyan]")
     print_transfer_status(data, start_data)
+    if verbose:
+        print("\n[b]Transfer data:[/]")
+        pprint(data, indent_guides=False, expand_all=True)
     if not all([value.hashes_match for value in data.values()]):
         controller.terminate()
         console = Console()
