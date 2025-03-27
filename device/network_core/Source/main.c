@@ -41,6 +41,7 @@ typedef struct {
     uint8_t     expected_hash[SWRMT_OTA_SHA256_LENGTH];
     uint8_t     computed_hash[SWRMT_OTA_SHA256_LENGTH];
     uint64_t    device_id;
+    int32_t     last_chunk_acked;
 } swrmt_app_data_t;
 
 static swrmt_app_data_t _app_vars = { 0 };
@@ -190,6 +191,7 @@ int main(void) {
                     if (ipc_shared_data.status != SWRMT_APPLICATION_READY || ipc_shared_data.status == SWRMT_APPLICATION_PROGRAMMING) {
                         break;
                     }
+                    ipc_shared_data.ota.last_chunk_acked = -1;
                     ipc_shared_data.status = SWRMT_APPLICATION_PROGRAMMING;
                     const swrmt_ota_start_pkt_t *pkt = (const swrmt_ota_start_pkt_t *)req->data;
                     // Copy expected hash
@@ -220,8 +222,10 @@ int main(void) {
                     memcpy((uint8_t *)ipc_shared_data.ota.chunk, pkt->chunk, pkt->chunk_size);
                     mutex_unlock();
 
-                    // Update computed hash
-                    crypto_sha256_update((const uint8_t *)ipc_shared_data.ota.chunk, ipc_shared_data.ota.chunk_size);
+                    // Update computed hash, only if chunk was not already acked
+                    if (ipc_shared_data.ota.last_chunk_acked != (int32_t)ipc_shared_data.ota.chunk_index) {
+                        crypto_sha256_update((const uint8_t *)ipc_shared_data.ota.chunk, ipc_shared_data.ota.chunk_size);
+                    }
 
                     printf("OTA chunk request received (index: %u, size: %u)\n", ipc_shared_data.ota.chunk_index, ipc_shared_data.ota.chunk_size);
                     // If last chunk, finalize computed hash, compare with expected hash and report to application core via shared memory

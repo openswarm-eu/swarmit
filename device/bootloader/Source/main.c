@@ -536,6 +536,7 @@ int main(void) {
             memcpy(_bootloader_vars.notification_buffer + length, (void *)&ipc_shared_data.ota.chunk_index, sizeof(uint32_t));
             length += sizeof(uint32_t);
             _bootloader_vars.notification_buffer[length++] = ipc_shared_data.ota.hashes_match;
+            ipc_shared_data.ota.last_chunk_acked = ipc_shared_data.ota.chunk_index;
             blink_node_tx(_bootloader_vars.notification_buffer, length);
         }
 
