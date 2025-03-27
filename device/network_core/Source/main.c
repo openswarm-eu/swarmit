@@ -255,7 +255,7 @@ int main(void) {
             switch (_app_vars.ipc_req) {
                 // Blink node functions
                 case IPC_BLINK_INIT_REQ:
-                    blink_init(BLINK_NODE, &schedule_minuscule, &blink_event_callback);
+                    blink_init(BLINK_NODE, &schedule_tiny, &blink_event_callback);
                     break;
                 case IPC_BLINK_NODE_TX_REQ:
                     while (!blink_node_is_connected()) {}

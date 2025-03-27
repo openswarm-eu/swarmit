@@ -125,7 +125,7 @@ int main(void) {
     db_gpio_set(&db_led3);
 
     // Configure Radio as transmitter
-    blink_init(BLINK_GATEWAY, &schedule_minuscule, &blink_event_callback);
+    blink_init(BLINK_GATEWAY, &schedule_tiny, &blink_event_callback);
 
     // Initialize the gateway context
     _gw_vars.buttons             = 0x0000;
@@ -137,6 +137,8 @@ int main(void) {
     db_timer_delay_s(TIMER_DEV, 1);
     db_gpio_set(&db_led1);
     _gw_vars.led1_blink = false;
+
+    puts("Gateway is ready");
 
     while (1) {
 
