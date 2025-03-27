@@ -48,7 +48,8 @@
     macros="BuildTarget=nrf5340-net"
     target_reset_script="Reset();"
     target_script_file="$(ProjectDir)/Setup/nRF_Target.js"
-    target_trace_initialize_script="EnableTrace(&quot;$(TraceInterfaceType)&quot;)" />
+    target_trace_initialize_script="EnableTrace(&quot;$(TraceInterfaceType)&quot;)"
+    use_compiler_driver="Yes" />
   <configuration
     Name="Debug"
     c_preprocessor_definitions="DEBUG"

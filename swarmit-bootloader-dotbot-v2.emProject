@@ -4,7 +4,6 @@
     LIBRARY_IO_TYPE="RTT"
     Name="Common"
     arm_architecture="v8M_Mainline"
-    arm_assembler_variant="SEGGER"
     arm_compiler_variant="SEGGER"
     arm_core_type="Cortex-M33"
     arm_endian="Little"
@@ -54,7 +53,8 @@
     macros="BuildTarget=dotbot-v2"
     target_reset_script="Reset();"
     target_script_file="$(ProjectDir)/Setup/nRF_Target.js"
-    target_trace_initialize_script="EnableTrace(&quot;$(TraceInterfaceType)&quot;)" />
+    target_trace_initialize_script="EnableTrace(&quot;$(TraceInterfaceType)&quot;)"
+    use_compiler_driver="Yes" />
   <configuration
     Name="Debug"
     c_preprocessor_definitions="DEBUG"
@@ -63,6 +63,7 @@
     gcc_optimization_level="None" />
   <configuration
     Name="Release"
+    arm_compiler_variant="SEGGER"
     c_preprocessor_definitions="NDEBUG"
     gcc_debugging_level="Level 2"
     gcc_omit_frame_pointer="Yes"

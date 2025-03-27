@@ -61,7 +61,8 @@
       project_type="Executable"
       target_reset_script="Reset();"
       target_script_file="$(ProjectDir)/Setup/nRF_Target.js"
-      target_trace_initialize_script="EnableTrace(&quot;$(TraceInterfaceType)&quot;)" />
+      target_trace_initialize_script="EnableTrace(&quot;$(TraceInterfaceType)&quot;)"
+      use_compiler_driver="Yes" />
     <folder Name="Setup">
       <file file_name="$(ProjectDir)/Setup/flash_placement.xml" />
       <file file_name="$(ProjectDir)/Setup/MemoryMap.xml" />
