@@ -577,7 +577,7 @@ class Controller:
                 send_time = time.time()
                 retries += 1
             time.sleep(0.001)
-            send = time.time() - send_time > 0.5
+            send = time.time() - send_time > 0.1
 
     def transfer(self, firmware):
         """Transfer the firmware to the devices."""
