@@ -241,7 +241,10 @@ class Controller:
             device_id
             for device_id, status in self.known_devices.items()
             if (
-                status == StatusType.Running
+                (
+                    status == StatusType.Running
+                    or status == StatusType.Programming
+                )
                 and (
                     not self.settings.devices
                     or device_id in self.settings.devices
