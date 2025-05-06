@@ -14,6 +14,7 @@ class StatusType(Enum):
     Running = 1
     Stopping = 2
     Resetting = 3
+    Programming = 4
 
 
 class SwarmitPayloadType(IntEnum):
@@ -53,7 +54,7 @@ class PayloadRequest(Packet):
         ]
     )
 
-    device_id: int = 0x0000000000000000
+    device_id: int = 0
 
 
 @dataclass
@@ -105,7 +106,7 @@ class PayloadOTAStartRequest(Packet):
         ]
     )
 
-    device_id: int = 0x0000000000000000
+    device_id: int = 0
     fw_length: int = 0
     fw_chunk_count: int = 0
     fw_hash: bytes = dataclasses.field(default_factory=lambda: bytearray)
@@ -124,7 +125,7 @@ class PayloadOTAChunkRequest(Packet):
         ]
     )
 
-    device_id: int = 0x0000000000000000
+    device_id: int = 0
     index: int = 0
     count: int = 0
     chunk: bytes = dataclasses.field(default_factory=lambda: bytearray)
@@ -144,7 +145,7 @@ class PayloadStatusNotification(Packet):
         ]
     )
 
-    device_id: int = 0x0000000000000000
+    device_id: int = 0
     status: StatusType = StatusType.Bootloader
 
 
@@ -158,7 +159,7 @@ class PayloadStartedNotification(Packet):
         ]
     )
 
-    device_id: int = 0x0000000000000000
+    device_id: int = 0
 
 
 @dataclass
@@ -171,7 +172,7 @@ class PayloadStoppedNotification(Packet):
         ]
     )
 
-    device_id: int = 0x0000000000000000
+    device_id: int = 0
 
 
 @dataclass
@@ -184,7 +185,7 @@ class PayloadOTAStartAckNotification(Packet):
         ]
     )
 
-    device_id: int = 0x0000000000000000
+    device_id: int = 0
 
 
 @dataclass
@@ -199,7 +200,7 @@ class PayloadOTAChunkAckNotification(Packet):
         ]
     )
 
-    device_id: int = 0x0000000000000000
+    device_id: int = 0
     index: int = 0
     hashes_match: int = 0
 
@@ -219,7 +220,7 @@ class PayloadEventNotification(Packet):
         ]
     )
 
-    device_id: int = 0x0000000000000000
+    device_id: int = 0
     timestamp: int = 0
     count: int = 0
     data: bytes = dataclasses.field(default_factory=lambda: bytearray)
@@ -239,7 +240,7 @@ class PayloadMessage(Packet):
         ]
     )
 
-    device_id: int = 0x0000000000000000
+    device_id: int = 0
     count: int = 0
     message: bytes = dataclasses.field(default_factory=lambda: bytearray)
 

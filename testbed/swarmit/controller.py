@@ -3,7 +3,6 @@
 import dataclasses
 import time
 from dataclasses import dataclass
-from typing import Optional
 
 import serial
 from cryptography.hazmat.primitives import hashes
@@ -35,6 +34,7 @@ from testbed.swarmit.protocol import (
 )
 
 CHUNK_SIZE = 128
+OTA_CHUNK_MAX_RETRIES = 5
 SERIAL_PORT_DEFAULT = get_default_port()
 
 
@@ -57,11 +57,23 @@ class StartOtaData:
 
 
 @dataclass
+class Chunk:
+    """Class that holds chunk status."""
+
+    index: str = "0"
+    size: str = "0B"
+    acked: int = 0
+    retries: int = 0
+
+    def __repr__(self):
+        return f"{dataclasses.asdict(self)}"
+
+
+@dataclass
 class TransferDataStatus:
     """Class that holds transfer data status for a single device."""
 
-    retries: list[int] = dataclasses.field(default_factory=lambda: [])
-    chunks_acked: set[int] = dataclasses.field(default_factory=lambda: set())
+    chunks: list[Chunk] = dataclasses.field(default_factory=lambda: [])
     hashes_match: bool = False
 
 
@@ -155,7 +167,7 @@ def print_transfer_status(
             )
             transfer_status_table.add_row(
                 f"{device_id}",
-                f"{len(status.chunks_acked)}/{start_data.chunks}",
+                f"{len([chunk for chunk in status.chunks if bool(chunk.acked)])}/{start_data.chunks}",
                 f"{start_marker}{bool(status.hashes_match)}{stop_marker}",
             )
 
@@ -180,6 +192,7 @@ class ControllerSettings:
     mqtt_port: int = 8883
     edge: bool = False
     devices: list[str] = dataclasses.field(default_factory=lambda: [])
+    verbose: bool = False
 
 
 class Controller:
@@ -196,7 +209,6 @@ class Controller:
         self.start_ota_data: StartOtaData = StartOtaData()
         self.transfer_data: dict[str, TransferDataStatus] = {}
         self._known_devices: dict[str, StatusType] = {}
-        self.expected_reply: Optional[SwarmitPayloadType] = None
         register_parsers()
         if self.settings.edge is True:
             self._interface = MQTTAdapter(
@@ -229,7 +241,10 @@ class Controller:
             device_id
             for device_id, status in self.known_devices.items()
             if (
-                status == StatusType.Running
+                (
+                    status == StatusType.Running
+                    or status == StatusType.Programming
+                )
                 and (
                     not self.settings.devices
                     or device_id in self.settings.devices
@@ -282,13 +297,13 @@ class Controller:
 
     def on_data_received(self, data):
         frame = Frame().from_bytes(data)
+        if self.settings.verbose:
+            print(f"\n{frame}")
         if frame.payload_type < SwarmitPayloadType.SWARMIT_REQUEST_STATUS:
             return
         device_id = f"{frame.payload.device_id:08X}"
         if (
             frame.payload_type
-            == SwarmitPayloadType.SWARMIT_NOTIFICATION_STATUS
-            and self.expected_reply
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_STATUS
         ):
             self.status_data.update(
@@ -297,23 +312,17 @@ class Controller:
         elif (
             frame.payload_type
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_STARTED
-            and self.expected_reply
-            == SwarmitPayloadType.SWARMIT_NOTIFICATION_STARTED
         ):
             if device_id not in self.started_data:
                 self.started_data.append(device_id)
         elif (
             frame.payload_type
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_STOPPED
-            and self.expected_reply
-            == SwarmitPayloadType.SWARMIT_NOTIFICATION_STOPPED
         ):
             if device_id not in self.stopped_data:
                 self.stopped_data.append(device_id)
         elif (
             frame.payload_type
-            == SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_START_ACK
-            and self.expected_reply
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_START_ACK
         ):
             if device_id not in self.start_ota_data.ids:
@@ -323,12 +332,16 @@ class Controller:
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_CHUNK_ACK
         ):
             if (
-                frame.payload.index
-                not in self.transfer_data[device_id].chunks_acked
-            ):
-                self.transfer_data[device_id].chunks_acked.add(
-                    frame.payload.index
+                bool(
+                    self.transfer_data[device_id]
+                    .chunks[frame.payload.index]
+                    .acked
                 )
+                is False
+            ):
+                self.transfer_data[device_id].chunks[
+                    frame.payload.index
+                ].acked = 1
             self.transfer_data[device_id].hashes_match = (
                 frame.payload.hashes_match
             )
@@ -358,12 +371,6 @@ class Controller:
                 == SwarmitPayloadType.SWARMIT_NOTIFICATION_EVENT_LOG
             ):
                 logger.info("LOG event")
-        elif frame.payload_type != self.expected_reply:
-            self.logger.warning(
-                "Unexpected payload",
-                payload_type=hex(frame.payload_type),
-                expected=hex(self.expected_reply),
-            )
         else:
             self.logger.error(
                 "Unknown payload type", payload_type=frame.payload_type
@@ -374,9 +381,8 @@ class Controller:
         self.status_data: dict[str, StatusType] = {}
         payload = PayloadStatusRequest(device_id=0)
         frame = Frame(header=Header(), payload=payload)
-        self.expected_reply = SwarmitPayloadType.SWARMIT_NOTIFICATION_STATUS
         self.send_frame(frame)
-        wait_for_done(1, lambda: False)
+        wait_for_done(2, lambda: False)
         return self.status_data
 
     def _send_start(self, device_id: str):
@@ -386,11 +392,9 @@ class Controller:
             else:
                 return device_id in self.started_data
 
-        self.expected_reply = SwarmitPayloadType.SWARMIT_NOTIFICATION_STARTED
         payload = PayloadStartRequest(device_id=int(device_id, base=16))
         self.send_frame(Frame(header=Header(), payload=payload))
         wait_for_done(3, is_started)
-        self.expected_reply = None
 
     def start(self):
         """Start the application."""
@@ -414,11 +418,9 @@ class Controller:
             else:
                 return device_id in self.stopped_data
 
-        self.expected_reply = SwarmitPayloadType.SWARMIT_NOTIFICATION_STOPPED
         payload = PayloadStopRequest(device_id=int(device_id, base=16))
         self.send_frame(Frame(header=Header(), payload=payload))
         wait_for_done(3, is_stopped)
-        self.expected_reply = None
 
     def stop(self):
         """Stop the application."""
@@ -522,9 +524,6 @@ class Controller:
                 )
             )
         self.fw_hash = digest.finalize()
-        self.expected_reply = (
-            SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_START_ACK
-        )
         self.start_ota_data.fw_hash = self.fw_hash
         self.start_ota_data.chunks = len(self.chunks)
         if not self.settings.devices:
@@ -534,7 +533,6 @@ class Controller:
             for device_id in self.settings.devices:
                 print(f"Sending start ota notification to {device_id}...")
                 self._send_start_ota(device_id, firmware)
-        self.expected_reply = None
         return self.start_ota_data
 
     def send_chunk(self, chunk, device_id: str):
@@ -545,23 +543,20 @@ class Controller:
                     self.ready_devices
                 ) and all(
                     [
-                        chunk.index in status.chunks_acked
+                        status.chunks[chunk.index].acked
                         for status in self.transfer_data.values()
                     ]
                 )
             else:
                 return (
                     device_id in self.transfer_data.keys()
-                    and chunk.index
-                    in self.transfer_data[device_id].chunks_acked
+                    and self.transfer_data[device_id].chunks[chunk.index].acked
                 )
 
         send_time = time.time()
         send = True
-        tries = 0
-        while tries < 3:
-            if is_chunk_acknowledged():
-                break
+        retries = 0
+        while not is_chunk_acknowledged() and retries <= OTA_CHUNK_MAX_RETRIES:
             if send is True:
                 payload = PayloadOTAChunkRequest(
                     device_id=int(device_id, base=16),
@@ -571,17 +566,18 @@ class Controller:
                 )
                 self.send_frame(Frame(header=Header(), payload=payload))
                 if device_id == "0":
-                    for device_id in self.ready_devices:
-                        self.transfer_data[device_id].retries[
+                    for device in self.ready_devices:
+                        self.transfer_data[device].chunks[
                             chunk.index
-                        ] = tries
+                        ].retries = retries
                 else:
-                    self.transfer_data[device_id].retries[chunk.index] = tries
-                tries += 1
-                time.sleep(0.01)
+                    self.transfer_data[device_id].chunks[
+                        chunk.index
+                    ].retries = retries
                 send_time = time.time()
+                retries += 1
             time.sleep(0.001)
-            send = time.time() - send_time > 1
+            send = time.time() - send_time > 0.1
 
     def transfer(self, firmware):
         """Transfer the firmware to the devices."""
@@ -596,18 +592,16 @@ class Controller:
         progress.set_description(
             f"Loading firmware ({int(data_size / 1024)}kB)"
         )
-        self.expected_reply = (
-            SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_CHUNK_ACK
-        )
         self.transfer_data = {}
-        if not self.settings.devices:
-            for device_id in self.ready_devices:
-                self.transfer_data[device_id] = TransferDataStatus()
-                self.transfer_data[device_id].retries = [0] * len(self.chunks)
-        else:
-            for device_id in self.settings.devices:
-                self.transfer_data[device_id] = TransferDataStatus()
-                self.transfer_data[device_id].retries = [0] * len(self.chunks)
+        devices = self.settings.devices
+        if not devices:
+            devices = self.ready_devices
+        for device_id in devices:
+            self.transfer_data[device_id] = TransferDataStatus()
+            self.transfer_data[device_id].chunks = [
+                Chunk(index=f"{i:03d}", size=f"{self.chunks[i].size:03d}B")
+                for i in range(len(self.chunks))
+            ]
         for chunk in self.chunks:
             if not self.settings.devices:
                 self.send_chunk(chunk, "0")
@@ -616,5 +610,4 @@ class Controller:
                     self.send_chunk(chunk, device_id)
             progress.update(chunk.size)
         progress.close()
-        self.expected_reply = None
         return self.transfer_data

@@ -15,14 +15,26 @@ https://github.com/user-attachments/assets/eff63b07-216a-41fb-9062-2e0e56f03c20
 
 ## Usage
 
+### Get the code
+
+Swarmit depends on the [DotBot-firmware](https://github.com/DotBots/DotBot-firmware)
+and [Blink](https://github.com/DotBots/Blink) repositories. They are included
+in the codebase as [Git submodules](https://git-scm.com/book/en/v2/Git-Tools-Submodules).
+
+Use the following command to clone the Swarmit codebase locally:
+
+```
+git clone --recurse-submodules https://github.com/DotBots/swarmit.git
+```
+
 ### Embedded C code
 
 SwarmIT embedded C code can be built using
 [Segger Embedded Studio (SES)](https://www.segger.com/products/development-tools/embedded-studio/).
 
 To provision a device, follow the following steps:
-1. open [netcore.emProject](device/network_core/netcore.emProject)
-and [bootloader.emProject](device/bootloader/bootloader-dotbot-v2.emProject) in SES
+1. open [netcore.emProject](swarmit-netcore.emProject)
+and [bootloader.emProject](swarmit-bootloader-dotbot-v2.emProject) in SES
 2. build and load the netcore application on the nRF53 network core,
 3. build and load the bootloader application on the nRF53 application core.
 
@@ -35,7 +47,7 @@ gateway board connected via USB to the computer.
 The gateway board is a Nordic nRF52840DK.
 
 The firmware to run on the gateway can also be compiled and flash using SES.
-The SES project to open is located at [gateway.emProject](gateway/gateway-nrf52840dk.emProject).
+The SES project to open is located at [gateway.emProject](swarmit-gateway-nrf52840dk.emProject).
 
 After flashing the gateway firmware, LED1 on the DK should blink fast during 1s.
 

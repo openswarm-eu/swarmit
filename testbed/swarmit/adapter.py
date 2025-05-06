@@ -5,8 +5,8 @@ from abc import ABC, abstractmethod
 
 import paho.mqtt.client as mqtt
 from dotbot.hdlc import HDLCHandler, HDLCState, hdlc_encode
-from dotbot.protocol import PROTOCOL_VERSION
 from dotbot.serial_interface import SerialInterface
+from rich import print
 
 
 class GatewayAdapterBase(ABC):
@@ -36,17 +36,24 @@ class SerialAdapter(GatewayAdapterBase):
     def on_byte_received(self, byte):
         self.hdlc_handler.handle_byte(byte)
         if self.hdlc_handler.state == HDLCState.READY:
-            self.on_data_received(self.hdlc_handler.payload)
+            try:
+                payload = self.hdlc_handler.payload
+                self.on_data_received(payload)
+            except:
+                pass
 
     def init(self, on_data_received: callable):
         self.serial = SerialInterface(
             self.port, self.baudrate, self.on_byte_received
         )
         self.on_data_received = on_data_received
-        # Just write a single byte to fake a DotBot gateway handshake
-        self.serial.write(int(PROTOCOL_VERSION).to_bytes(length=1))
+        print("[yellow]Connecting to gateway...[/]")
+        self.serial.serial.flush()
+        self.serial.write(hdlc_encode(b"\x01\xff"))
 
     def close(self):
+        print("[yellow]Disconnect from gateway...[/]")
+        self.serial.write(hdlc_encode(b"\x01\xfe"))
         self.serial.stop()
 
     def send_data(self, data):

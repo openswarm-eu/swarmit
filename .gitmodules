@@ -1,3 +1,7 @@
 [submodule "dotbot-firmware"]
 	path = dotbot-firmware
-	url = https://github.com/DotBots/dotbot-firmware
+    url = https://github.com/DotBots/dotbot-firmware
+    branch = adapt_to_swarmit
+[submodule "blink"]
+	path = blink
+	url = https://github.com/DotBots/blink

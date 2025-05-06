@@ -18,7 +18,7 @@
 #include "ipc.h"
 #include "nvmc.h"
 #include "protocol.h"
-#include "tdma_client.h"
+#include "blink.h"
 #include "tz.h"
 
 // DotBot-firmware includes
@@ -30,9 +30,8 @@
 #include "timer.h"
 
 #define SWARMIT_BASE_ADDRESS        (0x8000)
-#define RADIO_FREQ                  (8U)
 
-#define ADVERTIZE_DELAY             (2000U)
+#define ADVERTIZE_DELAY             (1000U)
 #define LH2_UPDATE_DELAY_MS         (250U) ///< 100ms delay between each LH2 data refresh
 
 #define ROBOT_DISTANCE_THRESHOLD    (0.05)
@@ -53,7 +52,6 @@ typedef struct {
     bool        ota_start_request;
     bool        ota_chunk_request;
     bool        start_application;
-    //bool        reset_application;
 #if defined(USE_LH2)
     db_lh2_t    lh2;
     bool        lh2_location;
@@ -249,7 +247,7 @@ static void _process_lh2(void) {
     if (_bootloader_vars.lh2.data_ready[0][0] == DB_LH2_PROCESSED_DATA_AVAILABLE && _bootloader_vars.lh2.data_ready[1][0] == DB_LH2_PROCESSED_DATA_AVAILABLE) {
         db_lh2_stop();
         // Prepare the radio buffer
-        size_t length = protocol_header_to_buffer(_bootloader_vars.notification_buffer, GATEWAY_ADDRESS);
+        size_t length = 0;
         _bootloader_vars.notification_buffer[length++] = PROTOCOL_DOTBOT_DATA;
         memcpy(_bootloader_vars.notification_buffer + length, &_control_loop_vars.direction, sizeof(int16_t));
         length += sizeof(int16_t);
@@ -264,7 +262,7 @@ static void _process_lh2(void) {
         }
 
         // Send the radio packet
-        tdma_client_tx(_bootloader_vars.notification_buffer, length);
+        blink_node_tx(_bootloader_vars.notification_buffer, length);
 
         db_lh2_start();
     }
@@ -414,7 +412,7 @@ int main(void) {
     // Start the network core
     release_network_core();
 
-    tdma_client_init(RADIO_BLE_1MBit, RADIO_FREQ);
+    blink_init();
 
     // Check reset reason and switch to user image if reset was not triggered by any wdt timeout
     uint32_t resetreas = NRF_RESET_S->RESETREAS;
@@ -428,12 +426,12 @@ int main(void) {
         ipc_shared_data.status = SWRMT_APPLICATION_RUNNING;
 
         // Notify application is about to start
-        size_t length = protocol_header_to_buffer(_bootloader_vars.notification_buffer, GATEWAY_ADDRESS);
+        size_t length = 0;
         _bootloader_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_STARTED;
         uint64_t device_id = _deviceid();
         memcpy(_bootloader_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
         length += sizeof(uint64_t);
-        tdma_client_tx(_bootloader_vars.notification_buffer, length);
+        blink_node_tx(_bootloader_vars.notification_buffer, length);
 
         // Initialize watchdog and non secure access
         setup_ns_user();
@@ -457,13 +455,13 @@ int main(void) {
 
     if (resetreas & RESET_RESETREAS_DOG1_Detected << RESET_RESETREAS_DOG1_Pos) {
         // Notify application is stopped
-        size_t length = protocol_header_to_buffer(_bootloader_vars.notification_buffer, GATEWAY_ADDRESS);
+        size_t length = 0;
         //size_t length = 0;
         _bootloader_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_STOPPED;
         uint64_t device_id = _deviceid();
         memcpy(_bootloader_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
         length += sizeof(uint64_t);
-        tdma_client_tx(_bootloader_vars.notification_buffer, length);
+        blink_node_tx(_bootloader_vars.notification_buffer, length);
     }
 
     _bootloader_vars.base_addr = SWARMIT_BASE_ADDRESS;
@@ -513,12 +511,12 @@ int main(void) {
             printf("Erasing done\n");
 
             // Notify erase is done
-            size_t length = protocol_header_to_buffer(_bootloader_vars.notification_buffer, GATEWAY_ADDRESS);
+            size_t length = 0;
             _bootloader_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_OTA_START_ACK;
             uint64_t device_id = _deviceid();
             memcpy(_bootloader_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
             length += sizeof(uint64_t);
-            tdma_client_tx(_bootloader_vars.notification_buffer, length);
+            blink_node_tx(_bootloader_vars.notification_buffer, length);
         }
 
         if (_bootloader_vars.ota_chunk_request) {
@@ -530,7 +528,7 @@ int main(void) {
             nvmc_write((uint32_t *)addr, (void *)ipc_shared_data.ota.chunk, ipc_shared_data.ota.chunk_size);
 
             // Notify chunk has been written
-            size_t length = protocol_header_to_buffer(_bootloader_vars.notification_buffer, GATEWAY_ADDRESS);
+            size_t length = 0;
             _bootloader_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_OTA_CHUNK_ACK;
             uint64_t device_id = _deviceid();
             memcpy(_bootloader_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
@@ -538,7 +536,8 @@ int main(void) {
             memcpy(_bootloader_vars.notification_buffer + length, (void *)&ipc_shared_data.ota.chunk_index, sizeof(uint32_t));
             length += sizeof(uint32_t);
             _bootloader_vars.notification_buffer[length++] = ipc_shared_data.ota.hashes_match;
-            tdma_client_tx(_bootloader_vars.notification_buffer, length);
+            ipc_shared_data.ota.last_chunk_acked = ipc_shared_data.ota.chunk_index;
+            blink_node_tx(_bootloader_vars.notification_buffer, length);
         }
 
         if (_bootloader_vars.start_application) {
@@ -546,10 +545,10 @@ int main(void) {
         }
 
 #if defined(USE_LH2)
-        if (_bootloader_vars.advertise) {
+        if (_bootloader_vars.advertise && ipc_shared_data.status != SWRMT_APPLICATION_PROGRAMMING) {
             db_gpio_toggle(&_status_led);
-            size_t length = db_protocol_advertizement_to_buffer(_bootloader_vars.notification_buffer, GATEWAY_ADDRESS, DotBot);
-             tdma_client_tx(_bootloader_vars.notification_buffer, length);
+            size_t length = db_protocol_advertizement_to_buffer(_bootloader_vars.notification_buffer, DotBot);
+            blink_node_tx(_bootloader_vars.notification_buffer, length);
             _bootloader_vars.advertise = false;
         }
 
@@ -596,7 +595,6 @@ int main(void) {
                 _control_loop_vars.final_direction_compensated = false;
                 _control_loop_vars.lh2_previous_location.x = 0;
                 _control_loop_vars.lh2_previous_location.y = 0;
-                //NRF_WDT1_S->TASKS_START = WDT_TASKS_START_TASKS_START_Trigger << WDT_TASKS_START_TASKS_START_Pos;
             }
 
             _bootloader_vars.lh2_location = false;
@@ -623,11 +621,6 @@ void IPC_IRQHandler(void) {
         NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_APPLICATION_START] = 0;
         _bootloader_vars.start_application = true;
     }
-
-    //if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_APPLICATION_RESET]) {
-    //    NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_APPLICATION_RESET] = 0;
-    //    _bootloader_vars.reset_application = true;
-    //}
 
 #if defined(USE_LH2)
     if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_LH2_LOCATION]) {

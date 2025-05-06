@@ -4,7 +4,6 @@
     LIBRARY_IO_TYPE="RTT"
     Name="Common"
     arm_architecture="v8M_Mainline"
-    arm_assembler_variant="SEGGER"
     arm_compiler_variant="SEGGER"
     arm_core_type="Cortex-M33"
     arm_endian="Little"
@@ -29,7 +28,7 @@
     build_treat_warnings_as_errors="Yes"
     c_additional_options="-Wall;-Wextra;-Wunused-variable;-Wuninitialized;-Wmissing-field-initializers;-Wundef;-ffunction-sections;-fdata-sections"
     c_only_additional_options="-Wno-missing-prototypes;-Wno-strict-prototypes"
-    c_preprocessor_definitions="ARM_MATH_ARMV8MML;NRF5340_XXAA;NRF_APPLICATION;__NRF_FAMILY;CONFIG_NFCT_PINS_AS_GPIOS;BOARD_DOTBOT_V2;USE_LH2"
+    c_preprocessor_definitions="ARM_MATH_ARMV8MML;NRF5340_XXAA;NRF_APPLICATION;__NRF_FAMILY;CONFIG_NFCT_PINS_AS_GPIOS;BOARD_NRF5340DK;USE_LH2"
     c_user_include_directories="$(SolutionDir)/../../dotbot-firmware/bsp;$(SolutionDir)/../../dotbot-firmware/drv;$(PackagesDir)/nRF/Device/Include;$(PackagesDir)/CMSIS_5/CMSIS/Core/Include"
     compile_post_build_command=""
     compiler_color_diagnostics="Yes"
@@ -46,7 +45,7 @@
     linker_additional_options="--gc-sections"
     linker_memory_map_file="$(ProjectDir)/Setup/MemoryMap.xml"
     linker_output_format="hex"
-    linker_post_build_command="cp $(ProjectDir)/Output/$(BuildTarget)/$(Configuration)/Exe/cmse_implib.a $(ProjectDir)/../../sample/."
+    linker_post_build_command="cp $(ProjectDir)/Output/$(BuildTarget)/$(Configuration)/Exe/cmse_implib.a $(SolutionDir)/../../sample/."
     linker_printf_fmt_level="int"
     linker_printf_fp_enabled="Float"
     linker_printf_width_precision_supported="Yes"
@@ -54,7 +53,8 @@
     macros="BuildTarget=dotbot-v2"
     target_reset_script="Reset();"
     target_script_file="$(ProjectDir)/Setup/nRF_Target.js"
-    target_trace_initialize_script="EnableTrace(&quot;$(TraceInterfaceType)&quot;)" />
+    target_trace_initialize_script="EnableTrace(&quot;$(TraceInterfaceType)&quot;)"
+    use_compiler_driver="Yes" />
   <configuration
     Name="Debug"
     c_preprocessor_definitions="DEBUG"
@@ -63,11 +63,13 @@
     gcc_optimization_level="None" />
   <configuration
     Name="Release"
+    arm_compiler_variant="SEGGER"
     c_preprocessor_definitions="NDEBUG"
     gcc_debugging_level="Level 2"
     gcc_omit_frame_pointer="Yes"
     gcc_optimization_level="Level 2 balanced" />
-  <import file_name="bootloader-app.emProject" />
-  <import file_name="../../dotbot-firmware/bsp/bsp.emProject" />
-  <import file_name="../../dotbot-firmware/drv/drv.emProject" />
+  <import file_name="device/bootloader/bootloader-app.emProject" />
+  <import file_name="dotbot-firmware/bsp/bsp.emProject" />
+  <import file_name="dotbot-firmware/crypto/crypto.emProject" />
+  <import file_name="dotbot-firmware/drv/drv.emProject" />
 </solution>
