@@ -3,7 +3,7 @@
   <project Name="gateway">
     <configuration
       Name="Common"
-      project_dependencies="00bsp_timer(bsp);00bsp_uart(bsp);00drv_dotbot_hdlc(drv);01blink(01blink)"
+      project_dependencies="00bsp_timer(bsp);00bsp_uart(bsp);00drv_dotbot_hdlc(drv);01mira(01mira)"
       project_directory="."
       project_type="Executable" />
     <folder Name="Setup">

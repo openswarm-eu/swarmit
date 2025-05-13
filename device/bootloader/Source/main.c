@@ -18,7 +18,7 @@
 #include "ipc.h"
 #include "nvmc.h"
 #include "protocol.h"
-#include "blink.h"
+#include "mira.h"
 #include "tz.h"
 
 // DotBot-firmware includes
@@ -262,7 +262,7 @@ static void _process_lh2(void) {
         }
 
         // Send the radio packet
-        blink_node_tx(_bootloader_vars.notification_buffer, length);
+        mira_node_tx(_bootloader_vars.notification_buffer, length);
 
         db_lh2_start();
     }
@@ -412,7 +412,7 @@ int main(void) {
     // Start the network core
     release_network_core();
 
-    blink_init();
+    mira_init();
 
     // Check reset reason and switch to user image if reset was not triggered by any wdt timeout
     uint32_t resetreas = NRF_RESET_S->RESETREAS;
@@ -431,7 +431,7 @@ int main(void) {
         uint64_t device_id = _deviceid();
         memcpy(_bootloader_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
         length += sizeof(uint64_t);
-        blink_node_tx(_bootloader_vars.notification_buffer, length);
+        mira_node_tx(_bootloader_vars.notification_buffer, length);
 
         // Initialize watchdog and non secure access
         setup_ns_user();
@@ -461,7 +461,7 @@ int main(void) {
         uint64_t device_id = _deviceid();
         memcpy(_bootloader_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
         length += sizeof(uint64_t);
-        blink_node_tx(_bootloader_vars.notification_buffer, length);
+        mira_node_tx(_bootloader_vars.notification_buffer, length);
     }
 
     _bootloader_vars.base_addr = SWARMIT_BASE_ADDRESS;
@@ -516,7 +516,7 @@ int main(void) {
             uint64_t device_id = _deviceid();
             memcpy(_bootloader_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
             length += sizeof(uint64_t);
-            blink_node_tx(_bootloader_vars.notification_buffer, length);
+            mira_node_tx(_bootloader_vars.notification_buffer, length);
         }
 
         if (_bootloader_vars.ota_chunk_request) {
@@ -537,7 +537,7 @@ int main(void) {
             length += sizeof(uint32_t);
             _bootloader_vars.notification_buffer[length++] = ipc_shared_data.ota.hashes_match;
             ipc_shared_data.ota.last_chunk_acked = ipc_shared_data.ota.chunk_index;
-            blink_node_tx(_bootloader_vars.notification_buffer, length);
+            mira_node_tx(_bootloader_vars.notification_buffer, length);
         }
 
         if (_bootloader_vars.start_application) {
@@ -548,7 +548,7 @@ int main(void) {
         if (_bootloader_vars.advertise && ipc_shared_data.status != SWRMT_APPLICATION_PROGRAMMING) {
             db_gpio_toggle(&_status_led);
             size_t length = db_protocol_advertizement_to_buffer(_bootloader_vars.notification_buffer, DotBot);
-            blink_node_tx(_bootloader_vars.notification_buffer, length);
+            mira_node_tx(_bootloader_vars.notification_buffer, length);
             _bootloader_vars.advertise = false;
         }
 
