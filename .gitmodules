@@ -1,7 +1,8 @@
 [submodule "dotbot-firmware"]
-	path = dotbot-firmware
+    path = dotbot-firmware
     url = https://github.com/DotBots/dotbot-firmware
     branch = main
-[submodule "blink"]
-	path = blink
-	url = https://github.com/DotBots/blink
+[submodule "mira"]
+    path = mira
+    url = https://github.com/DotBots/mira
+    branch = main

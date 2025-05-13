@@ -18,9 +18,9 @@
 #include "rng.h"
 #include "sha256.h"
 
-// Blink includes
-#include "bl_timer_hf.h"
-#include "blink.h"
+// Mira includes
+#include "mr_timer_hf.h"
+#include "mira.h"
 #include "models.h"
 
 #define NETCORE_MAIN_TIMER                  (0)
@@ -86,24 +86,24 @@ static void _handle_packet(uint8_t *packet, uint8_t length) {
     _app_vars.data_received = true;
 }
 
-static void blink_event_callback(bl_event_t event, bl_event_data_t event_data) {
+static void mira_event_callback(mr_event_t event, mr_event_data_t event_data) {
     switch (event) {
-        case BLINK_NEW_PACKET:
+        case MIRA_NEW_PACKET:
         {
             _handle_packet(event_data.data.new_packet.payload, event_data.data.new_packet.payload_len);
             break;
         }
-        case BLINK_CONNECTED: {
+        case MIRA_CONNECTED: {
             uint64_t gateway_id = event_data.data.gateway_info.gateway_id;
             printf("Connected to gateway %016llX\n", gateway_id);
             break;
         }
-        case BLINK_DISCONNECTED: {
+        case MIRA_DISCONNECTED: {
             uint64_t gateway_id = event_data.data.gateway_info.gateway_id;
             printf("Disconnected from gateway %016llX, reason: %u\n", gateway_id, event_data.tag);
             break;
         }
-        case BLINK_ERROR:
+        case MIRA_ERROR:
             printf("Error\n");
             break;
         default:
@@ -137,7 +137,7 @@ int main(void) {
     NVIC_SetPriority(IPC_IRQn, 1);
 
     // Configure timer used for timestamping events
-    bl_timer_hf_init(NETCORE_MAIN_TIMER);
+    mr_timer_hf_init(NETCORE_MAIN_TIMER);
 
     // Network core must remain on
     ipc_shared_data.net_ready = true;
@@ -157,7 +157,7 @@ int main(void) {
                     memcpy(_app_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
                     length += sizeof(uint64_t);
                     _app_vars.notification_buffer[length++] = ipc_shared_data.status;
-                    blink_node_tx_payload(_app_vars.notification_buffer, length);
+                    mira_node_tx_payload(_app_vars.notification_buffer, length);
                     printf("Replying to status request (status: %d)\n", ipc_shared_data.status);
                 }   break;
                 case SWRMT_REQUEST_START:
@@ -253,13 +253,13 @@ int main(void) {
         if (_app_vars.ipc_req != IPC_REQ_NONE) {
             ipc_shared_data.net_ack = false;
             switch (_app_vars.ipc_req) {
-                // Blink node functions
-                case IPC_BLINK_INIT_REQ:
-                    blink_init(BLINK_NODE, &schedule_tiny, &blink_event_callback);
+                // Mira node functions
+                case IPC_MIRA_INIT_REQ:
+                    mira_init(MIRA_NODE, &schedule_tiny, &mira_event_callback);
                     break;
-                case IPC_BLINK_NODE_TX_REQ:
-                    while (!blink_node_is_connected()) {}
-                    blink_node_tx_payload((uint8_t *)ipc_shared_data.tx_pdu.buffer, ipc_shared_data.tx_pdu.length);
+                case IPC_MIRA_NODE_TX_REQ:
+                    while (!mira_node_is_connected()) {}
+                    mira_node_tx_payload((uint8_t *)ipc_shared_data.tx_pdu.buffer, ipc_shared_data.tx_pdu.length);
                     break;
                 case IPC_RNG_INIT_REQ:
                     db_rng_init();
@@ -287,12 +287,12 @@ int main(void) {
             uint64_t device_id = _deviceid();
             memcpy(_app_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
             length += sizeof(uint64_t);
-            uint32_t timestamp = bl_timer_hf_now(NETCORE_MAIN_TIMER);
+            uint32_t timestamp = mr_timer_hf_now(NETCORE_MAIN_TIMER);
             memcpy(_app_vars.notification_buffer + length, &timestamp, sizeof(uint32_t));
             length += sizeof(uint32_t);
             memcpy(_app_vars.notification_buffer + length, (void *)&ipc_shared_data.log, ipc_shared_data.log.length + 1);
             length += ipc_shared_data.log.length + 1;
-            blink_node_tx_payload(_app_vars.notification_buffer, length);
+            mira_node_tx_payload(_app_vars.notification_buffer, length);
         }
     };
 }

@@ -24,8 +24,8 @@
       <file file_name="Source/protocol.h" />
       <file file_name="Source/rng.c" />
       <file file_name="Source/rng.h" />
-      <file file_name="Source/blink.c" />
-      <file file_name="Source/blink.h" />
+      <file file_name="Source/mira.c" />
+      <file file_name="Source/mira.h" />
       <file file_name="Source/tz.c" />
       <file file_name="Source/tz.h" />
     </folder>

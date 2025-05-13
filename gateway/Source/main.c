@@ -14,7 +14,7 @@
 #include "uart.h"
 
 #include "packet.h"
-#include "blink.h"
+#include "mira.h"
 
 //=========================== defines ==========================================
 #define TIMER_DEV           (1)
@@ -48,7 +48,7 @@ typedef struct {
     uint8_t                      radio_tx_buffer[BUFFER_MAX_BYTES];     ///< Internal buffer that contains the command to send (from buttons)
     gateway_radio_packet_queue_t radio_queue;                              ///< Queue used to process received radio packets outside of interrupt
     gateway_uart_queue_t         uart_queue;                               ///< Queue used to process received UART bytes outside of interrupt
-    bool                         led1_blink;                               ///< Whether the status LED should blink
+    bool                         led1_mira;                               ///< Whether the status LED should mira
     bool                         client_connected;
 } gateway_vars_t;
 
@@ -64,28 +64,28 @@ static void _uart_callback(uint8_t data) {
     _gw_vars.uart_queue.last                             = (_gw_vars.uart_queue.last + 1) & (UART_QUEUE_SIZE - 1);
 }
 
-void blink_event_callback(bl_event_t event, bl_event_data_t event_data) {
+void mira_event_callback(mr_event_t event, mr_event_data_t event_data) {
     switch (event) {
-        case BLINK_NEW_PACKET:
+        case MIRA_NEW_PACKET:
         {
-            memcpy(_gw_vars.radio_queue.packets[_gw_vars.radio_queue.last].buffer, event_data.data.new_packet.header, sizeof(bl_packet_header_t));
-            memcpy(_gw_vars.radio_queue.packets[_gw_vars.radio_queue.last].buffer + sizeof(bl_packet_header_t), event_data.data.new_packet.payload, event_data.data.new_packet.payload_len);
-            _gw_vars.radio_queue.packets[_gw_vars.radio_queue.last].length = sizeof(bl_packet_header_t) + event_data.data.new_packet.payload_len;
+            memcpy(_gw_vars.radio_queue.packets[_gw_vars.radio_queue.last].buffer, event_data.data.new_packet.header, sizeof(mr_packet_header_t));
+            memcpy(_gw_vars.radio_queue.packets[_gw_vars.radio_queue.last].buffer + sizeof(mr_packet_header_t), event_data.data.new_packet.payload, event_data.data.new_packet.payload_len);
+            _gw_vars.radio_queue.packets[_gw_vars.radio_queue.last].length = sizeof(mr_packet_header_t) + event_data.data.new_packet.payload_len;
             _gw_vars.radio_queue.last                                      = (_gw_vars.radio_queue.last + 1) & (RADIO_QUEUE_SIZE - 1);
             break;
         }
-        case BLINK_NODE_JOINED:
+        case MIRA_NODE_JOINED:
             printf("New node joined: %016llX\n", event_data.data.node_info.node_id);
-            uint64_t joined_nodes[BLINK_MAX_NODES] = { 0 };
-            uint8_t joined_nodes_len = blink_gateway_get_nodes(joined_nodes);
+            uint64_t joined_nodes[MIRA_MAX_NODES] = { 0 };
+            uint8_t joined_nodes_len = mira_gateway_get_nodes(joined_nodes);
             printf("Number of connected nodes: %d\n", joined_nodes_len);
             // TODO: send list of joined_nodes to Edge Gateway via UART
             break;
-        case BLINK_NODE_LEFT:
+        case MIRA_NODE_LEFT:
             printf("Node left: %016llX, reason: %u\n", event_data.data.node_info.node_id, event_data.tag);
-            printf("Number of connected nodes: %d\n", blink_gateway_count_nodes());
+            printf("Number of connected nodes: %d\n", mira_gateway_count_nodes());
             break;
-        case BLINK_ERROR:
+        case MIRA_ERROR:
             printf("Error\n");
             break;
         default:
@@ -93,8 +93,8 @@ void blink_event_callback(bl_event_t event, bl_event_data_t event_data) {
     }
 }
 
-static void _led1_blink_fast(void) {
-    if (_gw_vars.led1_blink) {
+static void _led1_mira_fast(void) {
+    if (_gw_vars.led1_mira) {
         db_gpio_toggle(&db_led1);
     }
 }
@@ -111,12 +111,12 @@ static void _led3_shutdown(void) {
 
 int main(void) {
     db_hfclk_init();
-    _gw_vars.led1_blink = true;
+    _gw_vars.led1_mira = true;
     // Initialize user feedback LEDs
     db_gpio_init(&db_led1, DB_GPIO_OUT);  // Global status
     db_gpio_set(&db_led1);
     db_timer_init(TIMER_DEV);
-    db_timer_set_periodic_ms(TIMER_DEV, 0, 50, _led1_blink_fast);
+    db_timer_set_periodic_ms(TIMER_DEV, 0, 50, _led1_mira_fast);
     db_timer_set_periodic_ms(TIMER_DEV, 1, 20, _led2_shutdown);
     db_timer_set_periodic_ms(TIMER_DEV, 2, 20, _led3_shutdown);
     db_gpio_init(&db_led2, DB_GPIO_OUT);  // Packet received from Radio (e.g from a DotBot)
@@ -125,7 +125,7 @@ int main(void) {
     db_gpio_set(&db_led3);
 
     // Configure Radio as transmitter
-    blink_init(BLINK_GATEWAY, &schedule_tiny, &blink_event_callback);
+    mira_init(MIRA_GATEWAY, &schedule_tiny, &mira_event_callback);
 
     // Initialize the gateway context
     _gw_vars.buttons             = 0x0000;
@@ -136,7 +136,7 @@ int main(void) {
     // Initialization done, wait a bit and shutdown status LED
     db_timer_delay_s(TIMER_DEV, 1);
     db_gpio_set(&db_led1);
-    _gw_vars.led1_blink = false;
+    _gw_vars.led1_mira = false;
 
     puts("Gateway is ready");
 
@@ -178,18 +178,18 @@ int main(void) {
                             puts("UART client disconnected");
                             break;
                         }
-                        bl_packet_header_t *header = (bl_packet_header_t *)_gw_vars.hdlc_rx_buffer;
-                        header->dst = BLINK_BROADCAST_ADDRESS;
+                        mr_packet_header_t *header = (mr_packet_header_t *)_gw_vars.hdlc_rx_buffer;
+                        header->dst = MIRA_BROADCAST_ADDRESS;
                         header->src = db_device_id();
-                        header->version = BLINK_PROTOCOL_VERSION;
-                        header->type = BLINK_PACKET_DATA;
-                        memcpy(_gw_vars.hdlc_rx_buffer, header, sizeof(bl_packet_header_t));
+                        header->version = MIRA_PROTOCOL_VERSION;
+                        header->type = MIRA_PACKET_DATA;
+                        memcpy(_gw_vars.hdlc_rx_buffer, header, sizeof(mr_packet_header_t));
                         printf("UART packet received (%d B): payload=", msg_len);
                         for (size_t i = 0; i < msg_len; i++) {
                             printf("%02X ", _gw_vars.hdlc_rx_buffer[i]);
                         }
                         printf("\n");
-                        blink_tx(_gw_vars.hdlc_rx_buffer, msg_len);
+                        mira_tx(_gw_vars.hdlc_rx_buffer, msg_len);
                     }
                 } break;
                 default:

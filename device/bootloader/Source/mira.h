@@ -1,5 +1,5 @@
-#ifndef __BLINK_H
-#define __BLINK_H
+#ifndef __MIRA_H
+#define __MIRA_H
 
 /**
  * @defgroup    drv_tdma_client      TDMA client radio driver
@@ -19,17 +19,17 @@
 //=========================== prototypes =======================================
 
 /**
- * @brief Initializes blink
+ * @brief Initializes mira
  */
-void blink_init(void);
+void mira_init(void);
 
 /**
- * @brief Queues a single node packet to send through blink
+ * @brief Queues a single node packet to send through mira
  *
  * @param[in] packet pointer to the array of data to send over the radio
  * @param[in] length Number of bytes to send
  *
  */
-void blink_node_tx(const uint8_t *packet, uint8_t length);
+void mira_node_tx(const uint8_t *packet, uint8_t length);
 
 #endif
