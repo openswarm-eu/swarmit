@@ -69,7 +69,12 @@ class MQTTAdapter(GatewayAdapterBase):
         self.client = None
 
     def on_message(self, client, userdata, message):
-        self.on_data_received(base64.b64decode(message.payload))
+        try:
+            self.on_data_received(base64.b64decode(message.payload))
+        except Exception as e:
+            # print the error and a stacktrace
+            print(f"[red]Error decoding MQTT message: {e}[/]")
+            print(f"[red]Message: {message.payload}[/]")
 
     def on_log(self, client, userdata, paho_log_level, messages):
         print(messages)
