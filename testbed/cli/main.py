@@ -156,9 +156,9 @@ def stop(ctx, verbose):
             ),
         )
         if verbose:
-            print("Started devices:")
+            print("Stopped devices:")
             pprint(stopped)
-            print("Not started devices:")
+            print("Not stopped devices:")
             pprint(
                 sorted(
                     set(
