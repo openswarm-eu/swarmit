@@ -190,7 +190,7 @@ class ControllerSettings:
     serial_baudrate: int = 1000000
     mqtt_host: str = "argus.paris.inria.fr"
     mqtt_port: int = 8883
-    adapter_class: GatewayAdapterBase = SerialAdapter
+    adapter: str = "serial"  # or "mqtt"
     devices: list[str] = dataclasses.field(default_factory=lambda: [])
     verbose: bool = False
 
@@ -210,7 +210,7 @@ class Controller:
         self.transfer_data: dict[str, TransferDataStatus] = {}
         self._known_devices: dict[str, StatusType] = {}
         register_parsers()
-        if self.settings.adapter_class is MQTTAdapter:
+        if self.settings.adapter == "mqtt":
             self._interface = MQTTAdapter(
                 self.settings.mqtt_host, self.settings.mqtt_port
             )
