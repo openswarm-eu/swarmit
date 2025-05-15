@@ -331,14 +331,20 @@ class Controller:
             frame.payload_type
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_CHUNK_ACK
         ):
-            if (
-                bool(
+            try:
+                acked = bool(
                     self.transfer_data[device_id]
                     .chunks[frame.payload.index]
                     .acked
                 )
-                is False
-            ):
+            except IndexError:
+                self.logger.warning(
+                    "Chunk index out of range",
+                    device_id=device_id,
+                    chunk_index=frame.payload.index,
+                )
+                return
+            if acked is False:
                 self.transfer_data[device_id].chunks[
                     frame.payload.index
                 ].acked = 1
