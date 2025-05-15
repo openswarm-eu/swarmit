@@ -12,6 +12,10 @@ from rich.console import Console
 from rich.pretty import pprint
 
 from testbed.swarmit import __version__
+from testbed.swarmit.adapter import (
+    MQTTAdapter,
+    SerialAdapter,
+)
 from testbed.swarmit.controller import (
     CHUNK_SIZE,
     Controller,
@@ -42,11 +46,10 @@ BAUDRATE_DEFAULT = 115200
     help=f"Serial port baudrate. Default: {BAUDRATE_DEFAULT}.",
 )
 @click.option(
-    "-e",
-    "--edge",
-    is_flag=True,
-    default=False,
-    help="Use MQTT adapter to communicate with an edge gateway.",
+    "-a",
+    "--adapter",
+    type=click.Choice(["serial", "mqtt"], case_sensitive=False),
+    help="Choose the adapter to communicate with the gateway: 'serial' or 'mqtt'.",
 )
 @click.option(
     "-d",
@@ -56,7 +59,7 @@ BAUDRATE_DEFAULT = 115200
     help="Subset list of devices to interact with, separated with ,",
 )
 @click.pass_context
-def main(ctx, port, baudrate, edge, devices):
+def main(ctx, port, baudrate, adapter, devices):
     if ctx.invoked_subcommand != "monitor":
         # Disable logging if not monitoring
         structlog.configure(
@@ -67,7 +70,9 @@ def main(ctx, port, baudrate, edge, devices):
     ctx.ensure_object(dict)
     ctx.obj["port"] = port
     ctx.obj["baudrate"] = baudrate
-    ctx.obj["edge"] = edge
+    ctx.obj["adapter_class"] = (
+        MQTTAdapter if adapter == "mqtt" else SerialAdapter
+    )
     ctx.obj["devices"] = [e for e in devices.split(",") if e]
 
 
@@ -87,7 +92,7 @@ def start(ctx, verbose):
             serial_baudrate=ctx.obj["baudrate"],
             mqtt_host="argus.paris.inria.fr",
             mqtt_port=8883,
-            edge=ctx.obj["edge"],
+            adapter_class=ctx.obj["adapter_class"],
             devices=list(ctx.obj["devices"]),
             verbose=verbose,
         )
@@ -133,7 +138,7 @@ def stop(ctx, verbose):
             serial_baudrate=ctx.obj["baudrate"],
             mqtt_host="argus.paris.inria.fr",
             mqtt_port=8883,
-            edge=ctx.obj["edge"],
+            adapter_class=ctx.obj["adapter_class"],
             devices=list(ctx.obj["devices"]),
             verbose=verbose,
         )
@@ -209,7 +214,7 @@ def reset(ctx, locations, verbose):
             serial_baudrate=ctx.obj["baudrate"],
             mqtt_host="argus.paris.inria.fr",
             mqtt_port=8883,
-            edge=ctx.obj["edge"],
+            adapter_class=ctx.obj["adapter_class"],
             devices=list(ctx.obj["devices"]),
             verbose=verbose,
         )
@@ -262,7 +267,7 @@ def flash(ctx, yes, start, verbose, firmware):
         serial_baudrate=ctx.obj["baudrate"],
         mqtt_host="argus.paris.inria.fr",
         mqtt_port=8883,
-        edge=ctx.obj["edge"],
+        adapter_class=ctx.obj["adapter_class"],
         devices=ctx.obj["devices"],
         verbose=verbose,
     )
@@ -327,7 +332,7 @@ def monitor(ctx):
             serial_baudrate=ctx.obj["baudrate"],
             mqtt_host="argus.paris.inria.fr",
             mqtt_port=8883,
-            edge=ctx.obj["edge"],
+            adapter_class=ctx.obj["adapter_class"],
             devices=ctx.obj["devices"],
         )
         controller = Controller(settings)
@@ -361,7 +366,7 @@ def status(ctx, verbose):
         serial_baudrate=ctx.obj["baudrate"],
         mqtt_host="argus.paris.inria.fr",
         mqtt_port=8883,
-        edge=ctx.obj["edge"],
+        adapter_class=ctx.obj["adapter_class"],
         devices=ctx.obj["devices"],
         verbose=verbose,
     )
@@ -384,7 +389,7 @@ def message(ctx, message):
         serial_baudrate=ctx.obj["baudrate"],
         mqtt_host="argus.paris.inria.fr",
         mqtt_port=8883,
-        edge=ctx.obj["edge"],
+        adapter_class=ctx.obj["adapter_class"],
         devices=ctx.obj["devices"],
     )
     controller = Controller(settings)
