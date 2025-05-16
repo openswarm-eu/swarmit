@@ -72,15 +72,15 @@ Default usage:
 Usage: swarmit [OPTIONS] COMMAND [ARGS]...
 
 Options:
-  --version               Show the version and exit.
-  -p, --port TEXT         Serial port to use to send the bitstream to the
-                          gateway. Default: /dev/ttyACM0.
-  -b, --baudrate INTEGER  Serial port baudrate. Default: 1000000.
-  -e, --edge              Use MQTT adapter to communicate with an edge
-                          gateway.
-  -d, --devices TEXT      Subset list of devices to interact with, separated
-                          with ,
-  -h, --help              Show this message and exit.
+  --version                    Show the version and exit.
+  -p, --port TEXT              Serial port to use to send the bitstream to the
+                               gateway. Default: /dev/ttyACM0.
+  -b, --baudrate INTEGER       Serial port baudrate. Default: 115200.
+  -a, --adapter [serial|mqtt]  Choose the adapter to communicate with the
+                               gateway.  [default: serial]
+  -d, --devices TEXT           Subset list of devices to interact with,
+                               separated with ,
+  -h, --help                   Show this message and exit.
 
 Commands:
   flash    Flash a firmware to the robots.
