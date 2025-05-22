@@ -31,6 +31,7 @@ git clone --recurse-submodules https://github.com/DotBots/swarmit.git
 
 SwarmIT embedded C code can be built using
 [Segger Embedded Studio (SES)](https://www.segger.com/products/development-tools/embedded-studio/).
+Use Tools > Package manager to install the CMSIS 5 CMSIS-CORE, CMSIS-DSP and nRF packages.
 
 To provision a device, follow the following steps:
 1. open [netcore.emProject](swarmit-netcore.emProject)
