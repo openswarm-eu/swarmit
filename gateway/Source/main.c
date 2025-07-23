@@ -19,21 +19,24 @@
 //=========================== defines ==========================================
 #define TIMER_DEV           (1)
 #define BUFFER_MAX_BYTES (255U)       ///< Max bytes in UART receive buffer
-#define UART_BAUDRATE    (115200UL)  ///< UART baudrate used by the gateway
+#define UART_BAUDRATE    (1000000UL)  ///< UART baudrate used by the gateway
 #define UART_INDEX       (0)  ///< Index of UART peripheral to use
-#define RADIO_QUEUE_SIZE (64U)                             ///< Size of the radio queue (must by a power of 2)
 #define UART_QUEUE_SIZE  ((BUFFER_MAX_BYTES + 1) * 2)  ///< Size of the UART queue size (must by a power of 2)
 
-typedef struct {
-    uint8_t length;                       ///< Length of the radio packet
-    uint8_t buffer[BUFFER_MAX_BYTES];  ///< Buffer containing the radio packet
-} gateway_radio_packet_t;
+#define SWARMIT_MIRA_NET_ID 0x0017
+
+#if defined(USE_MIRA_SCHEDULE_TINY)
+#define MIRA_SCHEDULE &schedule_tiny
+#elif defined(USE_MIRA_SCHEDULE_MINUSCULE)
+#define MIRA_SCHEDULE &schedule_minuscule
+#else
+#define MIRA_SCHEDULE &schedule_huge
+#endif
 
 typedef struct {
-    uint8_t                current;                       ///< Current position in the queue
-    uint8_t                last;                          ///< Position of the last item added in the queue
-    gateway_radio_packet_t packets[RADIO_QUEUE_SIZE];  ///< Buffer containing the received bytes
-} gateway_radio_packet_queue_t;
+    uint8_t length;                    ///< Length of the radio packet
+    uint8_t buffer[BUFFER_MAX_BYTES];  ///< Buffer containing the radio packet
+} gateway_radio_packet_t;
 
 typedef struct {
     uint16_t current;                     ///< Current position in the queue
@@ -43,19 +46,19 @@ typedef struct {
 
 typedef struct {
     uint8_t                      hdlc_rx_buffer[BUFFER_MAX_BYTES * 2];  ///< Buffer where message received on UART is stored
-    uint8_t                      hdlc_tx_buffer[BUFFER_MAX_BYTES * 2];  ///< Internal buffer used for sending serial HDLC frames
-    uint32_t                     buttons;                                  ///< Buttons state (one byte per button)
-    uint8_t                      radio_tx_buffer[BUFFER_MAX_BYTES];     ///< Internal buffer that contains the command to send (from buttons)
-    gateway_radio_packet_queue_t radio_queue;                              ///< Queue used to process received radio packets outside of interrupt
+    uint8_t                      hdlc_tx_buffer[BUFFER_MAX_BYTES * 2];  ///< Internal buffer used for sending serial HDLC fr
+    gateway_radio_packet_t       radio_packet;                          ///< Queue used to process received radio packets outside of interrupt
+    bool                         radio_packet_received;
     gateway_uart_queue_t         uart_queue;                               ///< Queue used to process received UART bytes outside of interrupt
-    bool                         led1_mira;                               ///< Whether the status LED should mira
+    uint32_t                     buttons;                               ///< Buttons state (one byte per button)
+    bool                         led1_mira;                             ///< Whether the status LED should mira
     bool                         client_connected;
 } gateway_vars_t;
 
 //=========================== variables ========================================
 
 extern schedule_t schedule_minuscule, schedule_tiny, schedule_small, schedule_huge, schedule_only_beacons, schedule_only_beacons_optimized_scan;
-static gateway_vars_t _gw_vars;
+static gateway_vars_t _gw_vars = { 0 };
 
 //=========================== callbacks ========================================
 
@@ -68,10 +71,10 @@ void mira_event_callback(mr_event_t event, mr_event_data_t event_data) {
     switch (event) {
         case MIRA_NEW_PACKET:
         {
-            memcpy(_gw_vars.radio_queue.packets[_gw_vars.radio_queue.last].buffer, event_data.data.new_packet.header, sizeof(mr_packet_header_t));
-            memcpy(_gw_vars.radio_queue.packets[_gw_vars.radio_queue.last].buffer + sizeof(mr_packet_header_t), event_data.data.new_packet.payload, event_data.data.new_packet.payload_len);
-            _gw_vars.radio_queue.packets[_gw_vars.radio_queue.last].length = sizeof(mr_packet_header_t) + event_data.data.new_packet.payload_len;
-            _gw_vars.radio_queue.last                                      = (_gw_vars.radio_queue.last + 1) & (RADIO_QUEUE_SIZE - 1);
+            memcpy(_gw_vars.radio_packet.buffer, event_data.data.new_packet.header, sizeof(mr_packet_header_t));
+            memcpy(_gw_vars.radio_packet.buffer + sizeof(mr_packet_header_t), event_data.data.new_packet.payload, event_data.data.new_packet.payload_len);
+            _gw_vars.radio_packet.length   = sizeof(mr_packet_header_t) + event_data.data.new_packet.payload_len;
+            _gw_vars.radio_packet_received = true;
             break;
         }
         case MIRA_NODE_JOINED:
@@ -125,12 +128,10 @@ int main(void) {
     db_gpio_set(&db_led3);
 
     // Configure Radio as transmitter
-    mira_init(MIRA_GATEWAY, &schedule_tiny, &mira_event_callback);
+    mira_init(MIRA_GATEWAY, SWARMIT_MIRA_NET_ID, MIRA_SCHEDULE, &mira_event_callback);
 
     // Initialize the gateway context
     _gw_vars.buttons             = 0x0000;
-    _gw_vars.radio_queue.current = 0;
-    _gw_vars.radio_queue.last    = 0;
     db_uart_init(UART_INDEX, &db_uart_rx, &db_uart_tx, UART_BAUDRATE, &_uart_callback);
 
     // Initialization done, wait a bit and shutdown status LED
@@ -142,18 +143,18 @@ int main(void) {
 
     while (1) {
 
-        while (_gw_vars.radio_queue.current != _gw_vars.radio_queue.last) {
+        if (_gw_vars.radio_packet_received) {
             db_gpio_clear(&db_led2);
-            size_t frame_len = db_hdlc_encode(_gw_vars.radio_queue.packets[_gw_vars.radio_queue.current].buffer, _gw_vars.radio_queue.packets[_gw_vars.radio_queue.current].length, _gw_vars.hdlc_tx_buffer);
-            printf("Radio packet received (%d B): payload=", _gw_vars.radio_queue.packets[_gw_vars.radio_queue.current].length);
-            for (int i = 0; i < _gw_vars.radio_queue.packets[_gw_vars.radio_queue.current].length; i++) {
-                printf("%02X ", _gw_vars.radio_queue.packets[_gw_vars.radio_queue.current].buffer[i]);
+            size_t frame_len = db_hdlc_encode(_gw_vars.radio_packet.buffer, _gw_vars.radio_packet.length, _gw_vars.hdlc_tx_buffer);
+            printf("Radio packet received (%d B): payload=", _gw_vars.radio_packet.length);
+            for (int i = 0; i < _gw_vars.radio_packet.length; i++) {
+                printf("%02X ", _gw_vars.radio_packet.buffer[i]);
             }
             printf("\n");
             if (_gw_vars.client_connected) {
                 db_uart_write(UART_INDEX, _gw_vars.hdlc_tx_buffer, frame_len);
             }
-            _gw_vars.radio_queue.current = (_gw_vars.radio_queue.current + 1) & (RADIO_QUEUE_SIZE - 1);
+            _gw_vars.radio_packet_received = false;
         }
 
         while (_gw_vars.uart_queue.current != _gw_vars.uart_queue.last) {
