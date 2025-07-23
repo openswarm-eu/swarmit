@@ -342,7 +342,7 @@ class Controller:
                     .chunks[frame.payload.index]
                     .acked
                 )
-            except IndexError:
+            except (IndexError, KeyError):
                 self.logger.warning(
                     "Chunk index out of range",
                     device_id=device_id,
@@ -566,8 +566,8 @@ class Controller:
 
         send_time = time.time()
         send = True
-        retries = 0
-        while not is_chunk_acknowledged() and retries <= retries:
+        retries_count = 0
+        while not is_chunk_acknowledged() and retries_count <= retries:
             if send is True:
                 payload = PayloadOTAChunkRequest(
                     device_id=int(device_id, base=16),
@@ -580,13 +580,13 @@ class Controller:
                     for device in self.ready_devices:
                         self.transfer_data[device].chunks[
                             chunk.index
-                        ].retries = retries
+                        ].retries = retries_count
                 else:
                     self.transfer_data[device_id].chunks[
                         chunk.index
-                    ].retries = retries
+                    ].retries = retries_count
                 send_time = time.time()
-                retries += 1
+                retries_count += 1
             time.sleep(0.001)
             send = time.time() - send_time > timeout
 

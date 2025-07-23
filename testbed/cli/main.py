@@ -253,7 +253,7 @@ def reset(ctx, locations, verbose):
     help="Timeout for each chunk transfer in seconds.",
 )
 @click.option(
-    "-t",
+    "-r",
     "--chunk-retries",
     type=int,
     default=OTA_CHUNK_MAX_RETRIES_DEFAULT,
