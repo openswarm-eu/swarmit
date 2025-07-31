@@ -2,7 +2,3 @@
     path = dotbot-firmware
     url = https://github.com/DotBots/dotbot-firmware
     branch = main
-[submodule "mira"]
-    path = mira
-    url = https://github.com/DotBots/mira
-    branch = main
