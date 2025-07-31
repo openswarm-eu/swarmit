@@ -20,11 +20,11 @@
 
 // Mira includes
 #include "mr_timer_hf.h"
-#include "mira.h"
+#include "mari.h"
 #include "models.h"
 
 #define NETCORE_MAIN_TIMER                  (0)
-#define SWARMIT_MIRA_NET_ID                 (0x0017)
+#define SWARMIT_MARI_NET_ID                 (0x0017)
 
 //=========================== variables =========================================
 
@@ -87,24 +87,24 @@ static void _handle_packet(uint8_t *packet, uint8_t length) {
     _app_vars.data_received = true;
 }
 
-static void mira_event_callback(mr_event_t event, mr_event_data_t event_data) {
+static void mari_event_callback(mr_event_t event, mr_event_data_t event_data) {
     switch (event) {
-        case MIRA_NEW_PACKET:
+        case MARI_NEW_PACKET:
         {
             _handle_packet(event_data.data.new_packet.payload, event_data.data.new_packet.payload_len);
             break;
         }
-        case MIRA_CONNECTED: {
+        case MARI_CONNECTED: {
             uint64_t gateway_id = event_data.data.gateway_info.gateway_id;
             printf("Connected to gateway %016llX\n", gateway_id);
             break;
         }
-        case MIRA_DISCONNECTED: {
+        case MARI_DISCONNECTED: {
             uint64_t gateway_id = event_data.data.gateway_info.gateway_id;
             printf("Disconnected from gateway %016llX, reason: %u\n", gateway_id, event_data.tag);
             break;
         }
-        case MIRA_ERROR:
+        case MARI_ERROR:
             printf("Error\n");
             break;
         default:
@@ -158,7 +158,7 @@ int main(void) {
                     memcpy(_app_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
                     length += sizeof(uint64_t);
                     _app_vars.notification_buffer[length++] = ipc_shared_data.status;
-                    mira_node_tx_payload(_app_vars.notification_buffer, length);
+                    mari_node_tx_payload(_app_vars.notification_buffer, length);
                     printf("Replying to status request (status: %d)\n", ipc_shared_data.status);
                 }   break;
                 case SWRMT_REQUEST_START:
@@ -255,12 +255,12 @@ int main(void) {
             ipc_shared_data.net_ack = false;
             switch (_app_vars.ipc_req) {
                 // Mira node functions
-                case IPC_MIRA_INIT_REQ:
-                    mira_init(MIRA_NODE, SWARMIT_MIRA_NET_ID, &schedule_tiny, &mira_event_callback);
+                case IPC_MARI_INIT_REQ:
+                    mari_init(MARI_NODE, SWARMIT_MARI_NET_ID, &schedule_tiny, &mari_event_callback);
                     break;
-                case IPC_MIRA_NODE_TX_REQ:
-                    while (!mira_node_is_connected()) {}
-                    mira_node_tx_payload((uint8_t *)ipc_shared_data.tx_pdu.buffer, ipc_shared_data.tx_pdu.length);
+                case IPC_MARI_NODE_TX_REQ:
+                    while (!mari_node_is_connected()) {}
+                    mari_node_tx_payload((uint8_t *)ipc_shared_data.tx_pdu.buffer, ipc_shared_data.tx_pdu.length);
                     break;
                 case IPC_RNG_INIT_REQ:
                     db_rng_init();
@@ -293,7 +293,7 @@ int main(void) {
             length += sizeof(uint32_t);
             memcpy(_app_vars.notification_buffer + length, (void *)&ipc_shared_data.log, ipc_shared_data.log.length + 1);
             length += ipc_shared_data.log.length + 1;
-            mira_node_tx_payload(_app_vars.notification_buffer, length);
+            mari_node_tx_payload(_app_vars.notification_buffer, length);
         }
     };
 }

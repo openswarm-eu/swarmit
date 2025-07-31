@@ -14,7 +14,7 @@
 #include "uart.h"
 
 #include "packet.h"
-#include "mira.h"
+#include "mari.h"
 
 //=========================== defines ==========================================
 #define TIMER_DEV           (1)
@@ -23,14 +23,14 @@
 #define UART_INDEX       (0)  ///< Index of UART peripheral to use
 #define UART_QUEUE_SIZE  ((BUFFER_MAX_BYTES + 1) * 2)  ///< Size of the UART queue size (must by a power of 2)
 
-#define SWARMIT_MIRA_NET_ID 0x0017
+#define SWARMIT_MARI_NET_ID 0x0017
 
-#if defined(USE_MIRA_SCHEDULE_TINY)
-#define MIRA_SCHEDULE &schedule_tiny
-#elif defined(USE_MIRA_SCHEDULE_MINUSCULE)
-#define MIRA_SCHEDULE &schedule_minuscule
+#if defined(USE_MARI_SCHEDULE_TINY)
+#define MARI_SCHEDULE &schedule_tiny
+#elif defined(USE_MARI_SCHEDULE_MINUSCULE)
+#define MARI_SCHEDULE &schedule_minuscule
 #else
-#define MIRA_SCHEDULE &schedule_huge
+#define MARI_SCHEDULE &schedule_huge
 #endif
 
 typedef struct {
@@ -51,7 +51,7 @@ typedef struct {
     bool                         radio_packet_received;
     gateway_uart_queue_t         uart_queue;                               ///< Queue used to process received UART bytes outside of interrupt
     uint32_t                     buttons;                               ///< Buttons state (one byte per button)
-    bool                         led1_mira;                             ///< Whether the status LED should mira
+    bool                         led1_mari;                             ///< Whether the status LED should mari
     bool                         client_connected;
 } gateway_vars_t;
 
@@ -67,9 +67,9 @@ static void _uart_callback(uint8_t data) {
     _gw_vars.uart_queue.last                             = (_gw_vars.uart_queue.last + 1) & (UART_QUEUE_SIZE - 1);
 }
 
-void mira_event_callback(mr_event_t event, mr_event_data_t event_data) {
+void mari_event_callback(mr_event_t event, mr_event_data_t event_data) {
     switch (event) {
-        case MIRA_NEW_PACKET:
+        case MARI_NEW_PACKET:
         {
             memcpy(_gw_vars.radio_packet.buffer, event_data.data.new_packet.header, sizeof(mr_packet_header_t));
             memcpy(_gw_vars.radio_packet.buffer + sizeof(mr_packet_header_t), event_data.data.new_packet.payload, event_data.data.new_packet.payload_len);
@@ -77,18 +77,18 @@ void mira_event_callback(mr_event_t event, mr_event_data_t event_data) {
             _gw_vars.radio_packet_received = true;
             break;
         }
-        case MIRA_NODE_JOINED:
+        case MARI_NODE_JOINED:
             printf("New node joined: %016llX\n", event_data.data.node_info.node_id);
-            uint64_t joined_nodes[MIRA_MAX_NODES] = { 0 };
-            uint8_t joined_nodes_len = mira_gateway_get_nodes(joined_nodes);
+            uint64_t joined_nodes[MARI_MAX_NODES] = { 0 };
+            uint8_t joined_nodes_len = mari_gateway_get_nodes(joined_nodes);
             printf("Number of connected nodes: %d\n", joined_nodes_len);
             // TODO: send list of joined_nodes to Edge Gateway via UART
             break;
-        case MIRA_NODE_LEFT:
+        case MARI_NODE_LEFT:
             printf("Node left: %016llX, reason: %u\n", event_data.data.node_info.node_id, event_data.tag);
-            printf("Number of connected nodes: %d\n", mira_gateway_count_nodes());
+            printf("Number of connected nodes: %d\n", mari_gateway_count_nodes());
             break;
-        case MIRA_ERROR:
+        case MARI_ERROR:
             printf("Error\n");
             break;
         default:
@@ -96,8 +96,8 @@ void mira_event_callback(mr_event_t event, mr_event_data_t event_data) {
     }
 }
 
-static void _led1_mira_fast(void) {
-    if (_gw_vars.led1_mira) {
+static void _led1_mari_fast(void) {
+    if (_gw_vars.led1_mari) {
         db_gpio_toggle(&db_led1);
     }
 }
@@ -114,12 +114,12 @@ static void _led3_shutdown(void) {
 
 int main(void) {
     db_hfclk_init();
-    _gw_vars.led1_mira = true;
+    _gw_vars.led1_mari = true;
     // Initialize user feedback LEDs
     db_gpio_init(&db_led1, DB_GPIO_OUT);  // Global status
     db_gpio_set(&db_led1);
     db_timer_init(TIMER_DEV);
-    db_timer_set_periodic_ms(TIMER_DEV, 0, 50, _led1_mira_fast);
+    db_timer_set_periodic_ms(TIMER_DEV, 0, 50, _led1_mari_fast);
     db_timer_set_periodic_ms(TIMER_DEV, 1, 20, _led2_shutdown);
     db_timer_set_periodic_ms(TIMER_DEV, 2, 20, _led3_shutdown);
     db_gpio_init(&db_led2, DB_GPIO_OUT);  // Packet received from Radio (e.g from a DotBot)
@@ -128,7 +128,7 @@ int main(void) {
     db_gpio_set(&db_led3);
 
     // Configure Radio as transmitter
-    mira_init(MIRA_GATEWAY, SWARMIT_MIRA_NET_ID, MIRA_SCHEDULE, &mira_event_callback);
+    mari_init(MARI_GATEWAY, SWARMIT_MARI_NET_ID, MARI_SCHEDULE, &mari_event_callback);
 
     // Initialize the gateway context
     _gw_vars.buttons             = 0x0000;
@@ -137,7 +137,7 @@ int main(void) {
     // Initialization done, wait a bit and shutdown status LED
     db_timer_delay_s(TIMER_DEV, 1);
     db_gpio_set(&db_led1);
-    _gw_vars.led1_mira = false;
+    _gw_vars.led1_mari = false;
 
     puts("Gateway is ready");
 
@@ -180,17 +180,17 @@ int main(void) {
                             break;
                         }
                         mr_packet_header_t *header = (mr_packet_header_t *)_gw_vars.hdlc_rx_buffer;
-                        header->dst = MIRA_BROADCAST_ADDRESS;
+                        header->dst = MARI_BROADCAST_ADDRESS;
                         header->src = db_device_id();
-                        header->version = MIRA_PROTOCOL_VERSION;
-                        header->type = MIRA_PACKET_DATA;
+                        header->version = MARI_PROTOCOL_VERSION;
+                        header->type = MARI_PACKET_DATA;
                         memcpy(_gw_vars.hdlc_rx_buffer, header, sizeof(mr_packet_header_t));
                         printf("UART packet received (%d B): payload=", msg_len);
                         for (size_t i = 0; i < msg_len; i++) {
                             printf("%02X ", _gw_vars.hdlc_rx_buffer[i]);
                         }
                         printf("\n");
-                        mira_tx(_gw_vars.hdlc_rx_buffer, msg_len);
+                        mari_tx(_gw_vars.hdlc_rx_buffer, msg_len);
                     }
                 } break;
                 default:

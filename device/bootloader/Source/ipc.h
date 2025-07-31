@@ -22,8 +22,8 @@
 
 typedef enum {
     IPC_REQ_NONE,        ///< Sorry, but nothing
-    IPC_MIRA_INIT_REQ,
-    IPC_MIRA_NODE_TX_REQ,
+    IPC_MARI_INIT_REQ,
+    IPC_MARI_NODE_TX_REQ,
     IPC_RNG_INIT_REQ,                ///< Request for rng init
     IPC_RNG_READ_REQ,                ///< Request for rng read
 } ipc_req_t;

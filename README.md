@@ -18,7 +18,7 @@ https://github.com/user-attachments/assets/eff63b07-216a-41fb-9062-2e0e56f03c20
 ### Get the code
 
 Swarmit depends on the [DotBot-firmware](https://github.com/DotBots/DotBot-firmware)
-and [Mira](https://github.com/DotBots/mira) repositories. They are included
+and [Mira](https://github.com/DotBots/mari) repositories. They are included
 in the codebase as [Git submodules](https://git-scm.com/book/en/v2/Git-Tools-Submodules).
 
 Use the following command to clone the Swarmit codebase locally:
@@ -50,7 +50,7 @@ The gateway board is a Nordic nRF52840DK.
 The firmware to run on the gateway can also be compiled and flash using SES.
 The SES project to open is located at [gateway.emProject](swarmit-gateway-nrf52840dk.emProject).
 
-After flashing the gateway firmware, LED1 on the DK should mira fast during 1s.
+After flashing the gateway firmware, LED1 on the DK should mari fast during 1s.
 
 ### Python CLI script
 

@@ -8,7 +8,7 @@
 #include "cmse_implib.h"
 #include "device.h"
 #include "ipc.h"
-#include "mira.h"
+#include "mari.h"
 #include "rng.h"
 
 static __attribute__((aligned(8))) uint8_t _tx_data_buffer[UINT8_MAX];
@@ -25,11 +25,11 @@ __attribute__((cmse_nonsecure_entry)) void swarmit_send_data_packet(const uint8_
     _tx_data_buffer[pos++] = length;
     memcpy(_tx_data_buffer + pos, &packet, length);
     pos += length;
-    mira_node_tx(_tx_data_buffer, pos);
+    mari_node_tx(_tx_data_buffer, pos);
 }
 
 __attribute__((cmse_nonsecure_entry)) void swarmit_send_raw_data(const uint8_t *packet, uint8_t length) {
-    mira_node_tx(packet, length);
+    mari_node_tx(packet, length);
 }
 
 __attribute__((cmse_nonsecure_entry)) void swarmit_ipc_isr(ipc_isr_cb_t cb) {
