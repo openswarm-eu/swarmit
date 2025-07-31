@@ -1,5 +1,5 @@
-#ifndef __MIRA_H
-#define __MIRA_H
+#ifndef __MARI_H
+#define __MARI_H
 
 /**
  * @defgroup    drv_tdma_client      TDMA client radio driver
@@ -19,17 +19,17 @@
 //=========================== prototypes =======================================
 
 /**
- * @brief Initializes mira
+ * @brief Initializes mari
  */
-void mira_init(void);
+void mari_init(void);
 
 /**
- * @brief Queues a single node packet to send through mira
+ * @brief Queues a single node packet to send through mari
  *
  * @param[in] packet pointer to the array of data to send over the radio
  * @param[in] length Number of bytes to send
  *
  */
-void mira_node_tx(const uint8_t *packet, uint8_t length);
+void mari_node_tx(const uint8_t *packet, uint8_t length);
 
 #endif
