@@ -16,6 +16,9 @@ exclude = [
 [tool.hatch.version]
 path = "testbed/swarmit/__init__.py"
 
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [project]
 name = "swarmit"
 dynamic = ["version"]
@@ -25,12 +28,13 @@ authors = [
 dependencies = [
     "click          == 8.1.7",
     "cryptography   == 43.0.1",
-    "pydotbot       == 0.23.0",
+    "pydotbot@git+https://github.com/DotBots/pydotbot",
     "pyserial       == 3.5",
     "rich           == 14.0.0",
     "structlog      == 24.4.0",
     "tqdm           == 4.66.5",
     "paho-mqtt      >= 2.1.0",
+    "marilib@git+https://github.com/DotBots/marilib",
 ]
 description = "Run Your Own Robot Swarm Testbed."
 readme = "README.md"
