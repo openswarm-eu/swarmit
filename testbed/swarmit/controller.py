@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import serial
 from cryptography.hazmat.primitives import hashes
 from dotbot.logger import LOGGER
-from dotbot.protocol import Frame, Header, ProtocolPayloadParserException
+from dotbot.protocol import Frame, Packet, Payload
 from dotbot.serial_interface import SerialInterfaceException, get_default_port
 from rich import print
 from rich.console import Console
@@ -17,6 +17,7 @@ from tqdm import tqdm
 
 from testbed.swarmit.adapter import (
     GatewayAdapterBase,
+    MariLibAdapter,
     MQTTAdapter,
     SerialAdapter,
 )
@@ -34,6 +35,7 @@ from testbed.swarmit.protocol import (
 )
 
 CHUNK_SIZE = 128
+COMMAND_TIMEOUT = 5
 OTA_CHUNK_MAX_RETRIES_DEFAULT = 5
 OTA_CHUNK_TIMEOUT_DEFAULT = 0.5
 SERIAL_PORT_DEFAULT = get_default_port()
@@ -215,6 +217,10 @@ class Controller:
             self._interface = MQTTAdapter(
                 self.settings.mqtt_host, self.settings.mqtt_port
             )
+        elif self.settings.adapter == "marilib":
+            self._interface = MariLibAdapter(
+                self.settings.serial_port, self.settings.serial_baudrate
+            )
         else:
             try:
                 self._interface = SerialAdapter(
@@ -226,7 +232,7 @@ class Controller:
             ) as exc:
                 console = Console()
                 console.print(f"[bold red]Error:[/] {exc}")
-        self._interface.init(self.on_data_received)
+        self._interface.init(self.on_frame_received)
 
     @property
     def known_devices(self) -> dict[str, StatusType]:
@@ -292,71 +298,68 @@ class Controller:
         """Terminate the controller."""
         self.interface.close()
 
-    def send_frame(self, frame: Frame):
+    def send_payload(self, payload: Payload):
         """Send a frame to the devices."""
-        self.interface.send_data(frame.to_bytes())
+        self.interface.send_payload(payload)
 
-    def on_data_received(self, data):
-        try:
-            frame = Frame().from_bytes(data)
-        except (ValueError, ProtocolPayloadParserException) as exc:
-            self.logger.warning("Failed to decode frame", error=exc)
-            return
+    def on_frame_received(self, header, packet: Packet):
+        """Handle the received frame."""
         if self.settings.verbose:
-            print(f"\n{frame}")
-        if frame.payload_type < SwarmitPayloadType.SWARMIT_REQUEST_STATUS:
+            print()
+            print(Frame(header, packet))
+        if packet.payload_type < SwarmitPayloadType.SWARMIT_REQUEST_STATUS:
             return
-        device_id = f"{frame.payload.device_id:08X}"
+        device_id = f"{packet.payload.device_id:08X}"
         if (
-            frame.payload_type
+            packet.payload_type
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_STATUS
         ):
             self.status_data.update(
-                {device_id: StatusType(frame.payload.status)}
+                {device_id: StatusType(packet.payload.status)}
             )
         elif (
-            frame.payload_type
+            packet.payload_type
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_STARTED
         ):
             if device_id not in self.started_data:
                 self.started_data.append(device_id)
         elif (
-            frame.payload_type
+            packet.payload_type
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_STOPPED
         ):
             if device_id not in self.stopped_data:
                 self.stopped_data.append(device_id)
         elif (
-            frame.payload_type
+            packet.payload_type
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_START_ACK
         ):
             if device_id not in self.start_ota_data.ids:
                 self.start_ota_data.ids.append(device_id)
         elif (
-            frame.payload_type
+            packet.payload_type
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_CHUNK_ACK
         ):
             try:
                 acked = bool(
                     self.transfer_data[device_id]
-                    .chunks[frame.payload.index]
+                    .chunks[packet.payload.index]
                     .acked
                 )
             except (IndexError, KeyError):
                 self.logger.warning(
                     "Chunk index out of range",
                     device_id=device_id,
-                    chunk_index=frame.payload.index,
+                    chunk_index=packet.payload.index,
                 )
                 return
             if acked is False:
                 self.transfer_data[device_id].chunks[
-                    frame.payload.index
+                    packet.payload.index
                 ].acked = 1
             self.transfer_data[device_id].hashes_match = (
-                frame.payload.hashes_match
+                packet.payload.hashes_match
             )
-        elif frame.payload_type in [
+        elif packet.payload_type in [
             SwarmitPayloadType.SWARMIT_NOTIFICATION_EVENT_GPIO,
             SwarmitPayloadType.SWARMIT_NOTIFICATION_EVENT_LOG,
         ]:
@@ -367,33 +370,31 @@ class Controller:
                 return
             logger = self.logger.bind(
                 deviceid=device_id,
-                notification=frame.payload_type.name,
-                timestamp=frame.payload.timestamp,
-                data_size=frame.payload.count,
-                data=frame.payload.data,
+                notification=SwarmitPayloadType(packet.payload_type).name,
+                timestamp=packet.payload.timestamp,
+                data_size=packet.payload.count,
+                data=packet.payload.data,
             )
             if (
-                frame.payload_type
+                packet.payload_type
                 == SwarmitPayloadType.SWARMIT_NOTIFICATION_EVENT_GPIO
             ):
                 logger.info("GPIO event")
             elif (
-                frame.payload_type
+                packet.payload_type
                 == SwarmitPayloadType.SWARMIT_NOTIFICATION_EVENT_LOG
             ):
                 logger.info("LOG event")
         else:
             self.logger.error(
-                "Unknown payload type", payload_type=frame.payload_type
+                "Unknown payload type", payload_type=packet.payload_type
             )
 
     def status(self):
         """Request the status of the testbed."""
         self.status_data: dict[str, StatusType] = {}
-        payload = PayloadStatusRequest(device_id=0)
-        frame = Frame(header=Header(), payload=payload)
-        self.send_frame(frame)
-        wait_for_done(3, lambda: False)
+        self.send_payload(PayloadStatusRequest(device_id=0))
+        wait_for_done(COMMAND_TIMEOUT, lambda: False)
         return self.status_data
 
     def _send_start(self, device_id: str):
@@ -404,8 +405,8 @@ class Controller:
                 return device_id in self.started_data
 
         payload = PayloadStartRequest(device_id=int(device_id, base=16))
-        self.send_frame(Frame(header=Header(), payload=payload))
-        wait_for_done(3, is_started)
+        self.send_payload(payload)
+        wait_for_done(COMMAND_TIMEOUT, is_started)
 
     def start(self):
         """Start the application."""
@@ -430,8 +431,8 @@ class Controller:
                 return device_id in self.stopped_data
 
         payload = PayloadStopRequest(device_id=int(device_id, base=16))
-        self.send_frame(Frame(header=Header(), payload=payload))
-        wait_for_done(3, is_stopped)
+        self.send_payload(payload)
+        wait_for_done(COMMAND_TIMEOUT, is_stopped)
 
     def stop(self):
         """Stop the application."""
@@ -452,7 +453,7 @@ class Controller:
             pos_x=location.pos_x,
             pos_y=location.pos_y,
         )
-        self.send_frame(Frame(header=Header(), payload=payload))
+        self.send_payload(payload)
 
     def reset(self, locations: dict[str, ResetLocation]):
         """Reset the application."""
@@ -477,8 +478,7 @@ class Controller:
             count=len(message),
             message=message.encode(),
         )
-        frame = Frame(header=Header(), payload=payload)
-        self.send_frame(frame)
+        self.send_payload(payload)
 
     def send_message(self, message):
         """Send a message to the devices."""
@@ -506,8 +506,8 @@ class Controller:
             fw_chunk_count=len(self.chunks),
             fw_hash=self.fw_hash,
         )
-        self.send_frame(Frame(header=Header(), payload=payload))
-        wait_for_done(3, is_start_ota_acknowledged)
+        self.send_payload(payload)
+        wait_for_done(COMMAND_TIMEOUT, is_start_ota_acknowledged)
 
     def start_ota(self, firmware) -> StartOtaData:
         """Start the OTA process."""
@@ -575,7 +575,7 @@ class Controller:
                     count=chunk.size,
                     chunk=chunk.data,
                 )
-                self.send_frame(Frame(header=Header(), payload=payload))
+                self.send_payload(payload)
                 if device_id == "0":
                     for device in self.ready_devices:
                         self.transfer_data[device].chunks[

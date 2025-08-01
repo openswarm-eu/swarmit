@@ -46,7 +46,7 @@ BAUDRATE_DEFAULT = 1000000
 @click.option(
     "-a",
     "--adapter",
-    type=click.Choice(["serial", "mqtt"], case_sensitive=False),
+    type=click.Choice(["serial", "mqtt", "marilib"], case_sensitive=False),
     default="serial",
     show_default=True,
     help="Choose the adapter to communicate with the gateway.",

@@ -4,7 +4,7 @@ import dataclasses
 from dataclasses import dataclass
 from enum import Enum, IntEnum
 
-from dotbot.protocol import Packet, PacketFieldMetadata, register_parser
+from dotbot.protocol import Payload, PayloadFieldMetadata, register_parser
 
 
 class StatusType(Enum):
@@ -45,12 +45,12 @@ class SwarmitPayloadType(IntEnum):
 
 
 @dataclass
-class PayloadRequest(Packet):
+class PayloadRequest(Payload):
     """Dataclass that holds an application request packet (start/stop/status)."""
 
-    metadata: list[PacketFieldMetadata] = dataclasses.field(
+    metadata: list[PayloadFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
-            PacketFieldMetadata(name="device_id", disp="id", length=8),
+            PayloadFieldMetadata(name="device_id", disp="id", length=8),
         ]
     )
 
@@ -73,14 +73,14 @@ class PayloadStopRequest(PayloadRequest):
 
 
 @dataclass
-class PayloadResetRequest(Packet):
+class PayloadResetRequest(Payload):
     """Dataclass that holds an application reset request packet."""
 
-    metadata: list[PacketFieldMetadata] = dataclasses.field(
+    metadata: list[PayloadFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
-            PacketFieldMetadata(name="device_id", disp="id", length=8),
-            PacketFieldMetadata(name="pos_x", length=4),
-            PacketFieldMetadata(name="pos_y", length=4),
+            PayloadFieldMetadata(name="device_id", disp="id", length=8),
+            PayloadFieldMetadata(name="pos_x", length=4),
+            PayloadFieldMetadata(name="pos_y", length=4),
         ]
     )
 
@@ -90,17 +90,17 @@ class PayloadResetRequest(Packet):
 
 
 @dataclass
-class PayloadOTAStartRequest(Packet):
+class PayloadOTAStartRequest(Payload):
     """Dataclass that holds an OTA start packet."""
 
-    metadata: list[PacketFieldMetadata] = dataclasses.field(
+    metadata: list[PayloadFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
-            PacketFieldMetadata(name="device_id", disp="id", length=8),
-            PacketFieldMetadata(name="fw_length", disp="len.", length=4),
-            PacketFieldMetadata(
+            PayloadFieldMetadata(name="device_id", disp="id", length=8),
+            PayloadFieldMetadata(name="fw_length", disp="len.", length=4),
+            PayloadFieldMetadata(
                 name="fw_chunk_counts", disp="chunks", length=4
             ),
-            PacketFieldMetadata(
+            PayloadFieldMetadata(
                 name="fw_hash", disp="hash.", type_=bytes, length=32
             ),
         ]
@@ -113,15 +113,15 @@ class PayloadOTAStartRequest(Packet):
 
 
 @dataclass
-class PayloadOTAChunkRequest(Packet):
+class PayloadOTAChunkRequest(Payload):
     """Dataclass that holds an OTA chunk packet."""
 
-    metadata: list[PacketFieldMetadata] = dataclasses.field(
+    metadata: list[PayloadFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
-            PacketFieldMetadata(name="device_id", disp="id", length=8),
-            PacketFieldMetadata(name="index", disp="idx", length=4),
-            PacketFieldMetadata(name="count", disp="size"),
-            PacketFieldMetadata(name="chunk", type_=bytes, length=0),
+            PayloadFieldMetadata(name="device_id", disp="id", length=8),
+            PayloadFieldMetadata(name="index", disp="idx", length=4),
+            PayloadFieldMetadata(name="count", disp="size"),
+            PayloadFieldMetadata(name="chunk", type_=bytes, length=0),
         ]
     )
 
@@ -135,13 +135,13 @@ class PayloadOTAChunkRequest(Packet):
 
 
 @dataclass
-class PayloadStatusNotification(Packet):
+class PayloadStatusNotification(Payload):
     """Dataclass that holds an application status notification packet."""
 
-    metadata: list[PacketFieldMetadata] = dataclasses.field(
+    metadata: list[PayloadFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
-            PacketFieldMetadata(name="device_id", disp="id", length=8),
-            PacketFieldMetadata(name="status", disp="st."),
+            PayloadFieldMetadata(name="device_id", disp="id", length=8),
+            PayloadFieldMetadata(name="status", disp="st."),
         ]
     )
 
@@ -150,12 +150,12 @@ class PayloadStatusNotification(Packet):
 
 
 @dataclass
-class PayloadStartedNotification(Packet):
+class PayloadStartedNotification(Payload):
     """Dataclass that holds an application started notification packet."""
 
-    metadata: list[PacketFieldMetadata] = dataclasses.field(
+    metadata: list[PayloadFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
-            PacketFieldMetadata(name="device_id", disp="id", length=8),
+            PayloadFieldMetadata(name="device_id", disp="id", length=8),
         ]
     )
 
@@ -163,12 +163,12 @@ class PayloadStartedNotification(Packet):
 
 
 @dataclass
-class PayloadStoppedNotification(Packet):
+class PayloadStoppedNotification(Payload):
     """Dataclass that holds an application stopped notification packet."""
 
-    metadata: list[PacketFieldMetadata] = dataclasses.field(
+    metadata: list[PayloadFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
-            PacketFieldMetadata(name="device_id", disp="id", length=8),
+            PayloadFieldMetadata(name="device_id", disp="id", length=8),
         ]
     )
 
@@ -176,12 +176,12 @@ class PayloadStoppedNotification(Packet):
 
 
 @dataclass
-class PayloadOTAStartAckNotification(Packet):
+class PayloadOTAStartAckNotification(Payload):
     """Dataclass that holds an application OTA start ACK notification packet."""
 
-    metadata: list[PacketFieldMetadata] = dataclasses.field(
+    metadata: list[PayloadFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
-            PacketFieldMetadata(name="device_id", disp="id", length=8),
+            PayloadFieldMetadata(name="device_id", disp="id", length=8),
         ]
     )
 
@@ -189,14 +189,14 @@ class PayloadOTAStartAckNotification(Packet):
 
 
 @dataclass
-class PayloadOTAChunkAckNotification(Packet):
+class PayloadOTAChunkAckNotification(Payload):
     """Dataclass that holds an application OTA chunk ACK notification packet."""
 
-    metadata: list[PacketFieldMetadata] = dataclasses.field(
+    metadata: list[PayloadFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
-            PacketFieldMetadata(name="device_id", disp="id", length=8),
-            PacketFieldMetadata(name="index", disp="idx", length=4),
-            PacketFieldMetadata(name="hashes_match", disp="match"),
+            PayloadFieldMetadata(name="device_id", disp="id", length=8),
+            PayloadFieldMetadata(name="index", disp="idx", length=4),
+            PayloadFieldMetadata(name="hashes_match", disp="match"),
         ]
     )
 
@@ -206,15 +206,15 @@ class PayloadOTAChunkAckNotification(Packet):
 
 
 @dataclass
-class PayloadEventNotification(Packet):
+class PayloadEventNotification(Payload):
     """Dataclass that holds an event notification packet."""
 
-    metadata: list[PacketFieldMetadata] = dataclasses.field(
+    metadata: list[PayloadFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
-            PacketFieldMetadata(name="device_id", disp="id", length=8),
-            PacketFieldMetadata(name="timestamp", disp="ts", length=4),
-            PacketFieldMetadata(name="count", disp="len."),
-            PacketFieldMetadata(
+            PayloadFieldMetadata(name="device_id", disp="id", length=8),
+            PayloadFieldMetadata(name="timestamp", disp="ts", length=4),
+            PayloadFieldMetadata(name="count", disp="len."),
+            PayloadFieldMetadata(
                 name="data", disp="data", type_=bytes, length=0
             ),
         ]
@@ -227,14 +227,14 @@ class PayloadEventNotification(Packet):
 
 
 @dataclass
-class PayloadMessage(Packet):
+class PayloadMessage(Payload):
     """Dataclass that holds a message packet."""
 
-    metadata: list[PacketFieldMetadata] = dataclasses.field(
+    metadata: list[PayloadFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
-            PacketFieldMetadata(name="device_id", disp="id", length=8),
-            PacketFieldMetadata(name="count", disp="len."),
-            PacketFieldMetadata(
+            PayloadFieldMetadata(name="device_id", disp="id", length=8),
+            PayloadFieldMetadata(name="count", disp="len."),
+            PayloadFieldMetadata(
                 name="message", disp="msg", type_=bytes, length=0
             ),
         ]
