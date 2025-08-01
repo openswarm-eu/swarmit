@@ -29,7 +29,7 @@
 #include "move.h"
 #include "timer.h"
 
-#define SWARMIT_BASE_ADDRESS        (0x8000)
+#define SWARMIT_BASE_ADDRESS        (0x10000)
 
 #define ADVERTIZE_DELAY             (1000U)
 #define LH2_UPDATE_DELAY_MS         (250U) ///< 100ms delay between each LH2 data refresh
@@ -141,7 +141,7 @@ static void setup_ns_user(void) {
     tz_configure_ram_non_secure(4, 48);
 
     // Configure Non Secure Callable subregion
-    NRF_SPU_S->FLASHNSC[0].REGION = 1;
+    NRF_SPU_S->FLASHNSC[0].REGION = 3;
     NRF_SPU_S->FLASHNSC[0].SIZE = 8;
 
     // Configure access to allows peripherals from non secure world
@@ -367,10 +367,10 @@ int main(void) {
 
     setup_watchdog1();
 
-    // First 2 flash regions (32kiB) is secure and contains the bootloader
-    tz_configure_flash_secure(0, 2);
+    // First 4 flash regions (64kiB) is secure and contains the bootloader
+    tz_configure_flash_secure(0, 4);
     // Configure non secure flash address space
-    tz_configure_flash_non_secure(2, 62);
+    tz_configure_flash_non_secure(4, 60);
 
     // Management code
     // Application mutex must be non secure because it's shared with the network which is itself non secure
@@ -505,8 +505,8 @@ int main(void) {
             printf("Pages to erase: %u\n", pages_count);
             for (uint32_t page = 0; page < pages_count; page++) {
                 uint32_t addr = _bootloader_vars.base_addr + page * FLASH_PAGE_SIZE;
-                printf("Erasing page %u at %p\n", page + 8, (uint32_t *)addr);
-                nvmc_page_erase(page + 8);
+                printf("Erasing page %u at %p\n", page + 16, (uint32_t *)addr);
+                nvmc_page_erase(page + 16);
             }
             printf("Erasing done\n");
 

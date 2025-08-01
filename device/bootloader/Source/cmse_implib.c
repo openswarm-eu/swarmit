@@ -57,7 +57,7 @@ __attribute__((cmse_nonsecure_entry)) void swarmit_log_data(uint8_t *data, size_
         return;
     }
 
-    if ((data > (uint8_t *)0x20000000 && data < (uint8_t *)0x20008000) || (data > (uint8_t *)0x00000000 && data < (uint8_t *)0x00004000)) {
+    if ((data > (uint8_t *)0x20000000 && data < (uint8_t *)0x20008000) || (data > (uint8_t *)0x00000000 && data < (uint8_t *)0x0000ff00)) {
         // Ensure data address is not in secure space
         return;
     }
