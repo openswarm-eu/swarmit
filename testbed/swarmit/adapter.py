@@ -14,9 +14,12 @@ from dotbot.protocol import (
     ProtocolPayloadParserException,
 )
 from dotbot.serial_interface import SerialInterface
+from marilib.communication_adapter import MQTTAdapter as MarilibMQTTAdapter
+from marilib.communication_adapter import SerialAdapter as MarilibSerialAdapter
 from marilib.mari_protocol import MARI_BROADCAST_ADDRESS
 from marilib.mari_protocol import Frame as MariFrame
-from marilib.marilib import MariLib
+from marilib.marilib_cloud import MarilibCloud
+from marilib.marilib_edge import MarilibEdge
 from marilib.model import EdgeEvent, MariNode
 from rich import print
 
@@ -40,12 +43,12 @@ class GatewayAdapterBase(ABC):
 class SerialAdapter(GatewayAdapterBase):
     """Class used to interface with the serial port."""
 
-    def __init__(self, port, baudrate):
+    def __init__(self, port: str, baudrate: int):
         self.port = port
         self.baudrate = baudrate
         self.hdlc_handler = HDLCHandler()
 
-    def on_byte_received(self, byte):
+    def on_byte_received(self, byte: bytes):
         self.hdlc_handler.handle_byte(byte)
         if self.hdlc_handler.state == HDLCState.READY:
             try:
@@ -73,13 +76,13 @@ class SerialAdapter(GatewayAdapterBase):
         self.serial.write(hdlc_encode(b"\x01\xfe"))
         self.serial.stop()
 
-    def send_payload(self, payload):
+    def send_payload(self, payload: Payload):
         frame = Frame(header=Header(), packet=Packet().from_payload(payload))
         self.serial.write(hdlc_encode(frame.to_bytes()))
         self.serial.serial.flush()
 
 
-class MariLibAdapter(GatewayAdapterBase):
+class MarilibEdgeAdapter(GatewayAdapterBase):
     """Class used to interface with Marilib."""
 
     def on_event(self, event: EdgeEvent, event_data: MariNode | MariFrame):
@@ -95,13 +98,15 @@ class MariLibAdapter(GatewayAdapterBase):
                 return
             self.on_frame_received(event_data.header, packet)
 
-    def __init__(self, port, baudrate):
-        self.mari = MariLib(self.on_event, port, baudrate)
+    def __init__(self, port: str, baudrate: int):
+        self.mari = MarilibEdge(
+            self.on_event, MarilibSerialAdapter(port, baudrate)
+        )
 
-    def _busy_wait(self, timeout):
+    def _busy_wait(self, timeout: int):
         """Wait for the condition to be met."""
         while timeout > 0:
-            self.mari.gateway.update()
+            self.mari.update()
             timeout -= 0.1
             time.sleep(0.1)
 
@@ -109,12 +114,58 @@ class MariLibAdapter(GatewayAdapterBase):
         self.on_frame_received = on_frame_received
         self._busy_wait(3)
         print("[yellow]Mari nodes available:[/]")
-        print(self.mari.gateway.nodes)
+        print(self.mari.nodes)
 
     def close(self):
         pass
 
-    def send_payload(self, payload):
+    def send_payload(self, payload: Payload):
+        self.mari.send_frame(
+            dst=MARI_BROADCAST_ADDRESS,
+            payload=Packet().from_payload(payload).to_bytes(),
+        )
+
+
+class MarilibCloudAdapter(GatewayAdapterBase):
+    """Class used to interface with Marilib."""
+
+    def on_event(self, event: EdgeEvent, event_data: MariNode | MariFrame):
+        if event == EdgeEvent.NODE_JOINED:
+            print("[green]Node joined:[/]", event_data)
+        elif event == EdgeEvent.NODE_LEFT:
+            print("[orange]Node left:[/]", event_data)
+        elif event == EdgeEvent.NODE_DATA:
+            try:
+                packet = Packet().from_bytes(event_data.payload)
+            except (ValueError, ProtocolPayloadParserException) as exc:
+                print(f"[red]Error parsing packet: {exc}[/]")
+                return
+            self.on_frame_received(event_data.header, packet)
+
+    def __init__(self, host: str, port: int, use_tls: bool, network_id: int):
+        self.mari = MarilibCloud(
+            self.on_event,
+            MarilibMQTTAdapter(host, port, use_tls=use_tls, is_edge=False),
+            network_id,
+        )
+
+    def _busy_wait(self, timeout):
+        """Wait for the condition to be met."""
+        while timeout > 0:
+            self.mari.update()
+            timeout -= 0.1
+            time.sleep(0.1)
+
+    def init(self, on_frame_received: callable):
+        self.on_frame_received = on_frame_received
+        self._busy_wait(3)
+        print("[yellow]Mari nodes available:[/]")
+        print(self.mari.nodes)
+
+    def close(self):
+        pass
+
+    def send_payload(self, payload: Payload):
         self.mari.send_frame(
             dst=MARI_BROADCAST_ADDRESS,
             payload=Packet().from_payload(payload).to_bytes(),
@@ -124,9 +175,10 @@ class MariLibAdapter(GatewayAdapterBase):
 class MQTTAdapter(GatewayAdapterBase):
     """Class used to interface with MQTT."""
 
-    def __init__(self, host, port):
+    def __init__(self, host: str, port: int, use_tls: bool):
         self.host = host
         self.port = port
+        self.use_tls = use_tls
         self.client = None
 
     def on_message(self, client, userdata, message):
@@ -156,7 +208,8 @@ class MQTTAdapter(GatewayAdapterBase):
             mqtt.CallbackAPIVersion.VERSION2,
             protocol=mqtt.MQTTProtocolVersion.MQTTv5,
         )
-        self.client.tls_set_context(context=None)
+        if self.use_tls:
+            self.client.tls_set_context(context=None)
         # self.client.on_log = self.on_log
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
@@ -167,7 +220,7 @@ class MQTTAdapter(GatewayAdapterBase):
         self.client.disconnect()
         self.client.loop_stop()
 
-    def send_payload(self, payload):
+    def send_payload(self, payload: Payload):
         frame = Frame(header=Header(), packet=Packet().from_payload(payload))
         self.client.publish(
             "/pydotbot/controller_to_edge",
