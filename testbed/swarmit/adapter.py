@@ -54,7 +54,7 @@ class SerialAdapter(GatewayAdapterBase):
             try:
                 data = self.hdlc_handler.payload
                 try:
-                    frame = Frame().from_bytes(data)
+                    frame = Frame.from_bytes(data)
                 except (ValueError, ProtocolPayloadParserException) as exc:
                     print(f"[red]Error parsing frame: {exc}[/]")
                     return
@@ -77,7 +77,7 @@ class SerialAdapter(GatewayAdapterBase):
         self.serial.stop()
 
     def send_payload(self, payload: Payload):
-        frame = Frame(header=Header(), packet=Packet().from_payload(payload))
+        frame = Frame(header=Header(), packet=Packet.from_payload(payload))
         self.serial.write(hdlc_encode(frame.to_bytes()))
         self.serial.serial.flush()
 
@@ -92,7 +92,7 @@ class MarilibEdgeAdapter(GatewayAdapterBase):
             print("[orange]Node left:[/]", event_data)
         elif event == EdgeEvent.NODE_DATA:
             try:
-                packet = Packet().from_bytes(event_data.payload)
+                packet = Packet.from_bytes(event_data.payload)
             except (ValueError, ProtocolPayloadParserException) as exc:
                 print(f"[red]Error parsing packet: {exc}[/]")
                 return
@@ -122,7 +122,7 @@ class MarilibEdgeAdapter(GatewayAdapterBase):
     def send_payload(self, payload: Payload):
         self.mari.send_frame(
             dst=MARI_BROADCAST_ADDRESS,
-            payload=Packet().from_payload(payload).to_bytes(),
+            payload=Packet.from_payload(payload).to_bytes(),
         )
 
 
@@ -136,7 +136,7 @@ class MarilibCloudAdapter(GatewayAdapterBase):
             print("[orange]Node left:[/]", event_data)
         elif event == EdgeEvent.NODE_DATA:
             try:
-                packet = Packet().from_bytes(event_data.payload)
+                packet = Packet.from_bytes(event_data.payload)
             except (ValueError, ProtocolPayloadParserException) as exc:
                 print(f"[red]Error parsing packet: {exc}[/]")
                 return
@@ -168,7 +168,7 @@ class MarilibCloudAdapter(GatewayAdapterBase):
     def send_payload(self, payload: Payload):
         self.mari.send_frame(
             dst=MARI_BROADCAST_ADDRESS,
-            payload=Packet().from_payload(payload).to_bytes(),
+            payload=Packet.from_payload(payload).to_bytes(),
         )
 
 
@@ -185,7 +185,7 @@ class MQTTAdapter(GatewayAdapterBase):
         try:
             data = base64.b64decode(message.payload)
             try:
-                frame = Frame().from_bytes(data)
+                frame = Frame.from_bytes(data)
             except (ValueError, ProtocolPayloadParserException) as exc:
                 print(f"[red]Error parsing frame: {exc}[/]")
                 return
@@ -221,7 +221,7 @@ class MQTTAdapter(GatewayAdapterBase):
         self.client.loop_stop()
 
     def send_payload(self, payload: Payload):
-        frame = Frame(header=Header(), packet=Packet().from_payload(payload))
+        frame = Frame(header=Header(), packet=Packet.from_payload(payload))
         self.client.publish(
             "/pydotbot/controller_to_edge",
             base64.b64encode(frame.to_bytes()).decode(),
