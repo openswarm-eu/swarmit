@@ -49,12 +49,8 @@ class PayloadRequest(Payload):
     """Dataclass that holds an application request packet (start/stop/status)."""
 
     metadata: list[PayloadFieldMetadata] = dataclasses.field(
-        default_factory=lambda: [
-            PayloadFieldMetadata(name="device_id", disp="id", length=8),
-        ]
+        default_factory=lambda: []
     )
-
-    device_id: int = 0
 
 
 @dataclass
@@ -78,13 +74,11 @@ class PayloadResetRequest(Payload):
 
     metadata: list[PayloadFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
-            PayloadFieldMetadata(name="device_id", disp="id", length=8),
             PayloadFieldMetadata(name="pos_x", length=4),
             PayloadFieldMetadata(name="pos_y", length=4),
         ]
     )
 
-    device_id: int = 0
     pos_x: int = 0
     pos_y: int = 0
 
@@ -95,7 +89,6 @@ class PayloadOTAStartRequest(Payload):
 
     metadata: list[PayloadFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
-            PayloadFieldMetadata(name="device_id", disp="id", length=8),
             PayloadFieldMetadata(name="fw_length", disp="len.", length=4),
             PayloadFieldMetadata(
                 name="fw_chunk_counts", disp="chunks", length=4
@@ -106,7 +99,6 @@ class PayloadOTAStartRequest(Payload):
         ]
     )
 
-    device_id: int = 0
     fw_length: int = 0
     fw_chunk_count: int = 0
     fw_hash: bytes = dataclasses.field(default_factory=lambda: bytearray)
@@ -118,14 +110,12 @@ class PayloadOTAChunkRequest(Payload):
 
     metadata: list[PayloadFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
-            PayloadFieldMetadata(name="device_id", disp="id", length=8),
             PayloadFieldMetadata(name="index", disp="idx", length=4),
             PayloadFieldMetadata(name="count", disp="size"),
             PayloadFieldMetadata(name="chunk", type_=bytes, length=0),
         ]
     )
 
-    device_id: int = 0
     index: int = 0
     count: int = 0
     chunk: bytes = dataclasses.field(default_factory=lambda: bytearray)
@@ -140,12 +130,10 @@ class PayloadStatusNotification(Payload):
 
     metadata: list[PayloadFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
-            PayloadFieldMetadata(name="device_id", disp="id", length=8),
             PayloadFieldMetadata(name="status", disp="st."),
         ]
     )
 
-    device_id: int = 0
     status: StatusType = StatusType.Bootloader
 
 
@@ -154,12 +142,8 @@ class PayloadStartedNotification(Payload):
     """Dataclass that holds an application started notification packet."""
 
     metadata: list[PayloadFieldMetadata] = dataclasses.field(
-        default_factory=lambda: [
-            PayloadFieldMetadata(name="device_id", disp="id", length=8),
-        ]
+        default_factory=lambda: []
     )
-
-    device_id: int = 0
 
 
 @dataclass
@@ -167,12 +151,8 @@ class PayloadStoppedNotification(Payload):
     """Dataclass that holds an application stopped notification packet."""
 
     metadata: list[PayloadFieldMetadata] = dataclasses.field(
-        default_factory=lambda: [
-            PayloadFieldMetadata(name="device_id", disp="id", length=8),
-        ]
+        default_factory=lambda: []
     )
-
-    device_id: int = 0
 
 
 @dataclass
@@ -180,12 +160,8 @@ class PayloadOTAStartAckNotification(Payload):
     """Dataclass that holds an application OTA start ACK notification packet."""
 
     metadata: list[PayloadFieldMetadata] = dataclasses.field(
-        default_factory=lambda: [
-            PayloadFieldMetadata(name="device_id", disp="id", length=8),
-        ]
+        default_factory=lambda: []
     )
-
-    device_id: int = 0
 
 
 @dataclass
@@ -194,13 +170,11 @@ class PayloadOTAChunkAckNotification(Payload):
 
     metadata: list[PayloadFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
-            PayloadFieldMetadata(name="device_id", disp="id", length=8),
             PayloadFieldMetadata(name="index", disp="idx", length=4),
             PayloadFieldMetadata(name="hashes_match", disp="match"),
         ]
     )
 
-    device_id: int = 0
     index: int = 0
     hashes_match: int = 0
 
@@ -211,7 +185,6 @@ class PayloadEventNotification(Payload):
 
     metadata: list[PayloadFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
-            PayloadFieldMetadata(name="device_id", disp="id", length=8),
             PayloadFieldMetadata(name="timestamp", disp="ts", length=4),
             PayloadFieldMetadata(name="count", disp="len."),
             PayloadFieldMetadata(
@@ -220,7 +193,6 @@ class PayloadEventNotification(Payload):
         ]
     )
 
-    device_id: int = 0
     timestamp: int = 0
     count: int = 0
     data: bytes = dataclasses.field(default_factory=lambda: bytearray)
@@ -232,7 +204,6 @@ class PayloadMessage(Payload):
 
     metadata: list[PayloadFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
-            PayloadFieldMetadata(name="device_id", disp="id", length=8),
             PayloadFieldMetadata(name="count", disp="len."),
             PayloadFieldMetadata(
                 name="message", disp="msg", type_=bytes, length=0
@@ -240,7 +211,6 @@ class PayloadMessage(Payload):
         ]
     )
 
-    device_id: int = 0
     count: int = 0
     message: bytes = dataclasses.field(default_factory=lambda: bytearray)
 

@@ -92,7 +92,7 @@ SWARMIT_NETWORK_ID_DEFAULT = 0x1200
     "--devices",
     type=str,
     default="",
-    help="Subset list of devices to interact with, separated with ,",
+    help="Subset list of device addresses to interact with, separated with ,",
 )
 @click.option(
     "-v",
@@ -130,7 +130,7 @@ def main(
         mqtt_use_tls=mqtt_use_tls,
         network_id=network_id,
         adapter=adapter,
-        devices=[e for e in devices.split(",") if e],
+        devices=[int(e, 16) for e in devices.split(",") if e],
         verbose=verbose,
     )
 
@@ -215,7 +215,7 @@ def stop(ctx):
 def reset(ctx, locations):
     """Reset robots locations.
 
-    Locations are provided as '<device_id>:<x>,<y>-<device_id>:<x>,<y>|...'
+    Locations are provided as '<device_addr>:<x>,<y>-<device_addr>:<x>,<y>|...'
     """
     try:
         controller = Controller(ctx.obj["settings"])
@@ -232,7 +232,7 @@ def reset(ctx, locations):
         print("No devices selected.")
         return
     locations = {
-        location.split(":")[0]: ResetLocation(
+        int(location.split(":")[0], 16): ResetLocation(
             pos_x=int(float(location.split(":")[1].split(",")[0]) * 1e6),
             pos_y=int(float(location.split(":")[1].split(",")[1]) * 1e6),
         )
@@ -301,14 +301,14 @@ def flash(ctx, yes, start, chunk_timeout, chunk_retries, firmware):
 
     devices = controller.settings.devices
     start_data = controller.start_ota(fw)
-    if (devices and sorted(start_data.ids) != sorted(devices)) or (
+    if (devices and sorted(start_data.addrs) != sorted(devices)) or (
         not devices
-        and sorted(start_data.ids) != sorted(controller.ready_devices)
+        and sorted(start_data.addrs) != sorted(controller.ready_devices)
     ):
         console = Console()
         console.print(
             "[bold red]Error:[/] some acknowledgments are missing "
-            f"({', '.join(sorted(set(controller.ready_devices).difference(set(start_data.ids))))}). "
+            f"({', '.join(sorted(set(controller.ready_devices).difference(set(start_data.addrs))))}). "
             "Aborting."
         )
         raise click.Abort()
@@ -335,7 +335,7 @@ def flash(ctx, yes, start, chunk_timeout, chunk_retries, firmware):
         started = controller.start()
         print_start_status(
             sorted(started),
-            sorted(set(start_data.ids).difference(set(started))),
+            sorted(set(start_data.addrs).difference(set(started))),
         )
     controller.terminate()
 

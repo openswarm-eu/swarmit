@@ -16,7 +16,6 @@ from dotbot.protocol import (
 from dotbot.serial_interface import SerialInterface
 from marilib.communication_adapter import MQTTAdapter as MarilibMQTTAdapter
 from marilib.communication_adapter import SerialAdapter as MarilibSerialAdapter
-from marilib.mari_protocol import MARI_BROADCAST_ADDRESS
 from marilib.mari_protocol import Frame as MariFrame
 from marilib.marilib_cloud import MarilibCloud
 from marilib.marilib_edge import MarilibEdge
@@ -36,7 +35,7 @@ class GatewayAdapterBase(ABC):
         """Close the interface."""
 
     @abstractmethod
-    def send_payload(self, payload: Payload):
+    def send_payload(self, destination: int, payload: Payload):
         """Send payload to the interface."""
 
 
@@ -76,8 +75,11 @@ class SerialAdapter(GatewayAdapterBase):
         self.serial.write(hdlc_encode(b"\x01\xfe"))
         self.serial.stop()
 
-    def send_payload(self, payload: Payload):
-        frame = Frame(header=Header(), packet=Packet.from_payload(payload))
+    def send_payload(self, destination: int, payload: Payload):
+        frame = Frame(
+            header=Header(destination=destination),
+            packet=Packet.from_payload(payload),
+        )
         self.serial.write(hdlc_encode(frame.to_bytes()))
         self.serial.serial.flush()
 
@@ -119,9 +121,9 @@ class MarilibEdgeAdapter(GatewayAdapterBase):
     def close(self):
         pass
 
-    def send_payload(self, payload: Payload):
+    def send_payload(self, destination: int, payload: Payload):
         self.mari.send_frame(
-            dst=MARI_BROADCAST_ADDRESS,
+            dst=destination,
             payload=Packet.from_payload(payload).to_bytes(),
         )
 
@@ -165,9 +167,9 @@ class MarilibCloudAdapter(GatewayAdapterBase):
     def close(self):
         pass
 
-    def send_payload(self, payload: Payload):
+    def send_payload(self, destination: int, payload: Payload):
         self.mari.send_frame(
-            dst=MARI_BROADCAST_ADDRESS,
+            dst=destination,
             payload=Packet.from_payload(payload).to_bytes(),
         )
 
@@ -220,8 +222,11 @@ class MQTTAdapter(GatewayAdapterBase):
         self.client.disconnect()
         self.client.loop_stop()
 
-    def send_payload(self, payload: Payload):
-        frame = Frame(header=Header(), packet=Packet.from_payload(payload))
+    def send_payload(self, destination: int, payload: Payload):
+        frame = Frame(
+            header=Header(destination=destination),
+            packet=Packet.from_payload(payload),
+        )
         self.client.publish(
             "/pydotbot/controller_to_edge",
             base64.b64encode(frame.to_bytes()).decode(),
