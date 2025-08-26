@@ -230,10 +230,6 @@ static void setup_ns_user(void) {
     __ISB(); // Flush and refill pipeline with updated permissions
 }
 
-uint64_t _deviceid(void) {
-    return ((uint64_t)NRF_FICR_S->INFO.DEVICEID[1]) << 32 | (uint64_t)NRF_FICR_S->INFO.DEVICEID[0];
-}
-
 #if defined(USE_LH2)
 static void _update_lh2(void) {
     _bootloader_vars.lh2_update = true;
@@ -428,9 +424,6 @@ int main(void) {
         // Notify application is about to start
         size_t length = 0;
         _bootloader_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_STARTED;
-        uint64_t device_id = _deviceid();
-        memcpy(_bootloader_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
-        length += sizeof(uint64_t);
         mari_node_tx(_bootloader_vars.notification_buffer, length);
 
         // Initialize watchdog and non secure access
@@ -458,9 +451,6 @@ int main(void) {
         size_t length = 0;
         //size_t length = 0;
         _bootloader_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_STOPPED;
-        uint64_t device_id = _deviceid();
-        memcpy(_bootloader_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
-        length += sizeof(uint64_t);
         mari_node_tx(_bootloader_vars.notification_buffer, length);
     }
 
@@ -510,9 +500,6 @@ int main(void) {
             // Notify erase is done
             size_t length = 0;
             _bootloader_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_OTA_START_ACK;
-            uint64_t device_id = _deviceid();
-            memcpy(_bootloader_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
-            length += sizeof(uint64_t);
             mari_node_tx(_bootloader_vars.notification_buffer, length);
         }
 
@@ -527,9 +514,6 @@ int main(void) {
             // Notify chunk has been written
             size_t length = 0;
             _bootloader_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_OTA_CHUNK_ACK;
-            uint64_t device_id = _deviceid();
-            memcpy(_bootloader_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
-            length += sizeof(uint64_t);
             memcpy(_bootloader_vars.notification_buffer + length, (void *)&ipc_shared_data.ota.chunk_index, sizeof(uint32_t));
             length += sizeof(uint32_t);
             _bootloader_vars.notification_buffer[length++] = ipc_shared_data.ota.hashes_match;

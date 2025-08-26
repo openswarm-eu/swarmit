@@ -60,13 +60,6 @@ static void _handle_packet(uint8_t *packet, uint8_t length) {
     uint8_t *ptr = _app_vars.req_buffer;
     uint8_t packet_type = (uint8_t)*ptr++;
     if ((packet_type >= SWRMT_REQUEST_STATUS) && (packet_type <= SWRMT_REQUEST_OTA_CHUNK)) {
-        uint64_t target_device_id;
-        memcpy(&target_device_id, ptr, sizeof(uint64_t));
-        if (target_device_id != _app_vars.device_id && target_device_id != 0) {
-            // Ignore packet not targetting this device
-            return;
-        }
-
         _app_vars.req_received = true;
         return;
     }
@@ -157,9 +150,6 @@ int main(void) {
                 {
                     size_t length = 0;
                     _app_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_STATUS;
-                    uint64_t device_id = _deviceid();
-                    memcpy(_app_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
-                    length += sizeof(uint64_t);
                     _app_vars.notification_buffer[length++] = ipc_shared_data.status;
                     mari_node_tx_payload(_app_vars.notification_buffer, length);
                     printf("Replying to status request (status: %d)\n", ipc_shared_data.status);
@@ -288,9 +278,6 @@ int main(void) {
             // Notify log data
             size_t length = 0;
             _app_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_LOG_EVENT;
-            uint64_t device_id = _deviceid();
-            memcpy(_app_vars.notification_buffer + length, &device_id, sizeof(uint64_t));
-            length += sizeof(uint64_t);
             uint32_t timestamp = mr_timer_hf_now(NETCORE_MAIN_TIMER);
             memcpy(_app_vars.notification_buffer + length, &timestamp, sizeof(uint32_t));
             length += sizeof(uint32_t);
