@@ -33,7 +33,6 @@ MARILIB_NETWORK_ID_DEFAULT = 1
 
 
 @click.group(context_settings=dict(help_option_names=["-h", "--help"]))
-@click.version_option(version=__version__)
 @click.option(
     "-p",
     "--port",
@@ -99,6 +98,7 @@ MARILIB_NETWORK_ID_DEFAULT = 1
     is_flag=True,
     help="Enable verbose mode.",
 )
+@click.version_option(__version__, "-V", "--version", prog_name="swarmit")
 @click.pass_context
 def main(
     ctx,
