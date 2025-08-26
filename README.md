@@ -67,21 +67,27 @@ The Python CLI script is available on PyPI. Install it using:
 pip install swarmit
 ```
 
-Default usage:
+Print usage using `swarmit --help`:
 
 ```
 Usage: swarmit [OPTIONS] COMMAND [ARGS]...
 
 Options:
-  --version                    Show the version and exit.
-  -p, --port TEXT              Serial port to use to send the bitstream to the
-                               gateway. Default: /dev/ttyACM0.
-  -b, --baudrate INTEGER       Serial port baudrate. Default: 115200.
-  -a, --adapter [serial|mqtt]  Choose the adapter to communicate with the
-                               gateway.  [default: serial]
-  -d, --devices TEXT           Subset list of devices to interact with,
-                               separated with ,
-  -h, --help                   Show this message and exit.
+  -p, --port TEXT                 Serial port to use to send the bitstream to
+                                  the gateway. Default: /dev/ttyACM0.
+  -b, --baudrate INTEGER          Serial port baudrate. Default: 1000000.
+  -H, --mqtt-host TEXT            MQTT host. Default: localhost.
+  -P, --mqtt-port INTEGER         MQTT port. Default: 1883.
+  -T, --mqtt-use_tls              Use TLS with MQTT.
+  -n, --network-id INTEGER        Marilib network ID to use. Default: 1
+  -a, --adapter [serial|mqtt|marilib-edge|marilib-cloud]
+                                  Choose the adapter to communicate with the
+                                  gateway.  [default: serial]
+  -d, --devices TEXT              Subset list of devices to interact with,
+                                  separated with ,
+  -v, --verbose                   Enable verbose mode.
+  -V, --version                   Show the version and exit.
+  -h, --help                      Show this message and exit.
 
 Commands:
   flash    Flash a firmware to the robots.
