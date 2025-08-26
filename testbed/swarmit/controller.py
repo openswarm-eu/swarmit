@@ -196,7 +196,7 @@ class ControllerSettings:
     mqtt_port: int = 1883
     mqtt_use_tls: bool = False
     network_id: int = 1
-    adapter: str = "serial"  # or "mqtt"
+    adapter: str = "serial"  # or "mqtt", "marilib-edge", "marilib-cloud"
     devices: list[str] = dataclasses.field(default_factory=lambda: [])
     verbose: bool = False
 

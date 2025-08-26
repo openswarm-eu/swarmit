@@ -93,6 +93,12 @@ MARILIB_NETWORK_ID_DEFAULT = 1
     default="",
     help="Subset list of devices to interact with, separated with ,",
 )
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    help="Enable verbose mode.",
+)
 @click.pass_context
 def main(
     ctx,
@@ -104,6 +110,7 @@ def main(
     network_id,
     adapter,
     devices,
+    verbose,
 ):
     if ctx.invoked_subcommand != "monitor":
         # Disable logging if not monitoring
@@ -113,38 +120,25 @@ def main(
             ),
         )
     ctx.ensure_object(dict)
-    ctx.obj["port"] = port
-    ctx.obj["baudrate"] = baudrate
-    ctx.obj["mqtt_host"] = mqtt_host
-    ctx.obj["mqtt_port"] = mqtt_port
-    ctx.obj["mqtt_use_tls"] = mqtt_use_tls
-    ctx.obj["network_id"] = network_id
-    ctx.obj["adapter"] = adapter
-    ctx.obj["devices"] = [e for e in devices.split(",") if e]
+    ctx.obj["settings"] = ControllerSettings(
+        serial_port=port,
+        serial_baudrate=baudrate,
+        mqtt_host=mqtt_host,
+        mqtt_port=mqtt_port,
+        mqtt_use_tls=mqtt_use_tls,
+        network_id=network_id,
+        adapter=adapter,
+        devices=[e for e in devices.split(",") if e],
+        verbose=verbose,
+    )
 
 
 @main.command()
-@click.option(
-    "-v",
-    "--verbose",
-    is_flag=True,
-    help="Enable verbose mode.",
-)
 @click.pass_context
-def start(ctx, verbose):
+def start(ctx):
     """Start the user application."""
     try:
-        settings = ControllerSettings(
-            serial_port=ctx.obj["port"],
-            serial_baudrate=ctx.obj["baudrate"],
-            mqtt_host=ctx.obj["mqtt_host"],
-            mqtt_port=ctx.obj["mqtt_port"],
-            network_id=ctx.obj["network_id"],
-            adapter=ctx.obj["adapter"],
-            devices=list(ctx.obj["devices"]),
-            verbose=verbose,
-        )
-        controller = Controller(settings)
+        controller = Controller(ctx.obj["settings"])
     except (
         SerialInterfaceException,
         serial.serialutil.SerialException,
@@ -158,7 +152,7 @@ def start(ctx, verbose):
             sorted(started),
             sorted(set(controller.ready_devices).difference(set(started))),
         )
-        if verbose:
+        if controller.settings.verbose:
             print("Started devices:")
             pprint(started)
             print("Not started devices:")
@@ -171,27 +165,11 @@ def start(ctx, verbose):
 
 
 @main.command()
-@click.option(
-    "-v",
-    "--verbose",
-    is_flag=True,
-    help="Enable verbose mode.",
-)
 @click.pass_context
-def stop(ctx, verbose):
+def stop(ctx):
     """Stop the user application."""
     try:
-        settings = ControllerSettings(
-            serial_port=ctx.obj["port"],
-            serial_baudrate=ctx.obj["baudrate"],
-            mqtt_host=ctx.obj["mqtt_host"],
-            mqtt_port=ctx.obj["mqtt_port"],
-            network_id=ctx.obj["network_id"],
-            adapter=ctx.obj["adapter"],
-            devices=list(ctx.obj["devices"]),
-            verbose=verbose,
-        )
-        controller = Controller(settings)
+        controller = Controller(ctx.obj["settings"])
     except (
         SerialInterfaceException,
         serial.serialutil.SerialException,
@@ -209,7 +187,7 @@ def stop(ctx, verbose):
                 ).difference(set(stopped))
             ),
         )
-        if verbose:
+        if controller.settings.verbose:
             print("Stopped devices:")
             pprint(stopped)
             print("Not stopped devices:")
@@ -231,19 +209,23 @@ def stop(ctx, verbose):
     "locations",
     type=str,
 )
-@click.option(
-    "-v",
-    "--verbose",
-    is_flag=True,
-    help="Enable verbose mode.",
-)
 @click.pass_context
-def reset(ctx, locations, verbose):
+def reset(ctx, locations):
     """Reset robots locations.
 
     Locations are provided as '<device_id>:<x>,<y>-<device_id>:<x>,<y>|...'
     """
-    devices = ctx.obj["devices"]
+    try:
+        controller = Controller(ctx.obj["settings"])
+    except (
+        SerialInterfaceException,
+        serial.serialutil.SerialException,
+    ) as exc:
+        console = Console()
+        console.print(f"[bold red]Error:[/] {exc}")
+        return
+
+    devices = controller.settings.devices
     if not devices:
         print("No devices selected.")
         return
@@ -256,25 +238,6 @@ def reset(ctx, locations, verbose):
     }
     if sorted(devices) and sorted(locations.keys()) != sorted(devices):
         print("Selected devices and reset locations do not match.")
-        return
-    try:
-        settings = ControllerSettings(
-            serial_port=ctx.obj["port"],
-            serial_baudrate=ctx.obj["baudrate"],
-            mqtt_host=ctx.obj["mqtt_host"],
-            mqtt_port=ctx.obj["mqtt_port"],
-            network_id=ctx.obj["network_id"],
-            adapter=ctx.obj["adapter"],
-            devices=list(ctx.obj["devices"]),
-            verbose=verbose,
-        )
-        controller = Controller(settings)
-    except (
-        SerialInterfaceException,
-        serial.serialutil.SerialException,
-    ) as exc:
-        console = Console()
-        console.print(f"[bold red]Error:[/] {exc}")
         return
     if not controller.ready_devices:
         print("No device to reset.")
@@ -312,15 +275,9 @@ def reset(ctx, locations, verbose):
     show_default=True,
     help="Number of retries for each chunk transfer.",
 )
-@click.option(
-    "-v",
-    "--verbose",
-    is_flag=True,
-    help="Enable verbose mode.",
-)
 @click.argument("firmware", type=click.File(mode="rb"), required=False)
 @click.pass_context
-def flash(ctx, yes, start, chunk_timeout, chunk_retries, verbose, firmware):
+def flash(ctx, yes, start, chunk_timeout, chunk_retries, firmware):
     """Flash a firmware to the robots."""
     console = Console()
     if firmware is None:
@@ -328,17 +285,7 @@ def flash(ctx, yes, start, chunk_timeout, chunk_retries, verbose, firmware):
         ctx.exit()
 
     fw = bytearray(firmware.read())
-    settings = ControllerSettings(
-        serial_port=ctx.obj["port"],
-        serial_baudrate=ctx.obj["baudrate"],
-        mqtt_host=ctx.obj["mqtt_host"],
-        mqtt_port=ctx.obj["mqtt_port"],
-        network_id=ctx.obj["network_id"],
-        adapter=ctx.obj["adapter"],
-        devices=ctx.obj["devices"],
-        verbose=verbose,
-    )
-    controller = Controller(settings)
+    controller = Controller(ctx.obj["settings"])
     if not controller.ready_devices:
         console.print("[bold red]Error:[/] No ready devices found. Exiting.")
         controller.terminate()
@@ -373,7 +320,7 @@ def flash(ctx, yes, start, chunk_timeout, chunk_retries, verbose, firmware):
     )
     print(f"Elapsed: [bold cyan]{time.time() - start_time:.3f}s[/bold cyan]")
     print_transfer_status(data, start_data)
-    if verbose:
+    if controller.settings.verbose:
         print("\n[b]Transfer data:[/]")
         pprint(data, indent_guides=False, expand_all=True)
     if not all([value.hashes_match for value in data.values()]):
@@ -396,16 +343,7 @@ def flash(ctx, yes, start, chunk_timeout, chunk_retries, verbose, firmware):
 def monitor(ctx):
     """Monitor running applications."""
     try:
-        settings = ControllerSettings(
-            serial_port=ctx.obj["port"],
-            serial_baudrate=ctx.obj["baudrate"],
-            mqtt_host=ctx.obj["mqtt_host"],
-            mqtt_port=ctx.obj["mqtt_port"],
-            network_id=ctx.obj["network_id"],
-            adapter=ctx.obj["adapter"],
-            devices=ctx.obj["devices"],
-        )
-        controller = Controller(settings)
+        controller = Controller(ctx.obj["settings"])
     except (
         SerialInterfaceException,
         serial.serialutil.SerialException,
@@ -422,26 +360,10 @@ def monitor(ctx):
 
 
 @main.command()
-@click.option(
-    "-v",
-    "--verbose",
-    is_flag=True,
-    help="Enable verbose mode.",
-)
 @click.pass_context
-def status(ctx, verbose):
+def status(ctx):
     """Print current status of the robots."""
-    settings = ControllerSettings(
-        serial_port=ctx.obj["port"],
-        serial_baudrate=ctx.obj["baudrate"],
-        mqtt_host=ctx.obj["mqtt_host"],
-        mqtt_port=ctx.obj["mqtt_port"],
-        network_id=ctx.obj["network_id"],
-        adapter=ctx.obj["adapter"],
-        devices=ctx.obj["devices"],
-        verbose=verbose,
-    )
-    controller = Controller(settings)
+    controller = Controller(ctx.obj["settings"])
     data = controller.status()
     if not data:
         click.echo("No devices found.")
@@ -455,16 +377,7 @@ def status(ctx, verbose):
 @click.pass_context
 def message(ctx, message):
     """Send a custom text message to the robots."""
-    settings = ControllerSettings(
-        serial_port=ctx.obj["port"],
-        serial_baudrate=ctx.obj["baudrate"],
-        mqtt_host=ctx.obj["mqtt_host"],
-        mqtt_port=ctx.obj["mqtt_port"],
-        network_id=ctx.obj["network_id"],
-        adapter=ctx.obj["adapter"],
-        devices=ctx.obj["devices"],
-    )
-    controller = Controller(settings)
+    controller = Controller(ctx.obj["settings"])
     controller.send_message(message)
     controller.terminate()
 
