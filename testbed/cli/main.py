@@ -27,6 +27,9 @@ from testbed.swarmit.controller import (
 
 SERIAL_PORT_DEFAULT = get_default_port()
 BAUDRATE_DEFAULT = 1000000
+MQTT_HOST_DEFAULT = "localhost"
+MQTT_PORT_DEFAULT = 1883
+MARILIB_NETWORK_ID_DEFAULT = 1
 
 
 @click.group(context_settings=dict(help_option_names=["-h", "--help"]))
@@ -34,19 +37,51 @@ BAUDRATE_DEFAULT = 1000000
 @click.option(
     "-p",
     "--port",
+    type=str,
     default=SERIAL_PORT_DEFAULT,
     help=f"Serial port to use to send the bitstream to the gateway. Default: {SERIAL_PORT_DEFAULT}.",
 )
 @click.option(
     "-b",
     "--baudrate",
+    type=int,
     default=BAUDRATE_DEFAULT,
     help=f"Serial port baudrate. Default: {BAUDRATE_DEFAULT}.",
 )
 @click.option(
+    "-H",
+    "--mqtt-host",
+    type=str,
+    default=MQTT_HOST_DEFAULT,
+    help=f"MQTT host. Default: {MQTT_HOST_DEFAULT}.",
+)
+@click.option(
+    "-P",
+    "--mqtt-port",
+    type=int,
+    default=MQTT_PORT_DEFAULT,
+    help=f"MQTT port. Default: {MQTT_PORT_DEFAULT}.",
+)
+@click.option(
+    "-T",
+    "--mqtt-use_tls",
+    is_flag=True,
+    help="Use TLS with MQTT.",
+)
+@click.option(
+    "-n",
+    "--network-id",
+    type=int,
+    default=MARILIB_NETWORK_ID_DEFAULT,
+    help=f"Marilib network ID to use. Default: {MARILIB_NETWORK_ID_DEFAULT}",
+)
+@click.option(
     "-a",
     "--adapter",
-    type=click.Choice(["serial", "mqtt", "marilib"], case_sensitive=False),
+    type=click.Choice(
+        ["serial", "mqtt", "marilib-edge", "marilib-cloud"],
+        case_sensitive=True,
+    ),
     default="serial",
     show_default=True,
     help="Choose the adapter to communicate with the gateway.",
@@ -59,7 +94,17 @@ BAUDRATE_DEFAULT = 1000000
     help="Subset list of devices to interact with, separated with ,",
 )
 @click.pass_context
-def main(ctx, port, baudrate, adapter, devices):
+def main(
+    ctx,
+    port,
+    baudrate,
+    mqtt_host,
+    mqtt_port,
+    mqtt_use_tls,
+    network_id,
+    adapter,
+    devices,
+):
     if ctx.invoked_subcommand != "monitor":
         # Disable logging if not monitoring
         structlog.configure(
@@ -70,6 +115,10 @@ def main(ctx, port, baudrate, adapter, devices):
     ctx.ensure_object(dict)
     ctx.obj["port"] = port
     ctx.obj["baudrate"] = baudrate
+    ctx.obj["mqtt_host"] = mqtt_host
+    ctx.obj["mqtt_port"] = mqtt_port
+    ctx.obj["mqtt_use_tls"] = mqtt_use_tls
+    ctx.obj["network_id"] = network_id
     ctx.obj["adapter"] = adapter
     ctx.obj["devices"] = [e for e in devices.split(",") if e]
 
@@ -88,8 +137,9 @@ def start(ctx, verbose):
         settings = ControllerSettings(
             serial_port=ctx.obj["port"],
             serial_baudrate=ctx.obj["baudrate"],
-            mqtt_host="argus.paris.inria.fr",
-            mqtt_port=8883,
+            mqtt_host=ctx.obj["mqtt_host"],
+            mqtt_port=ctx.obj["mqtt_port"],
+            network_id=ctx.obj["network_id"],
             adapter=ctx.obj["adapter"],
             devices=list(ctx.obj["devices"]),
             verbose=verbose,
@@ -134,8 +184,9 @@ def stop(ctx, verbose):
         settings = ControllerSettings(
             serial_port=ctx.obj["port"],
             serial_baudrate=ctx.obj["baudrate"],
-            mqtt_host="argus.paris.inria.fr",
-            mqtt_port=8883,
+            mqtt_host=ctx.obj["mqtt_host"],
+            mqtt_port=ctx.obj["mqtt_port"],
+            network_id=ctx.obj["network_id"],
             adapter=ctx.obj["adapter"],
             devices=list(ctx.obj["devices"]),
             verbose=verbose,
@@ -210,8 +261,9 @@ def reset(ctx, locations, verbose):
         settings = ControllerSettings(
             serial_port=ctx.obj["port"],
             serial_baudrate=ctx.obj["baudrate"],
-            mqtt_host="argus.paris.inria.fr",
-            mqtt_port=8883,
+            mqtt_host=ctx.obj["mqtt_host"],
+            mqtt_port=ctx.obj["mqtt_port"],
+            network_id=ctx.obj["network_id"],
             adapter=ctx.obj["adapter"],
             devices=list(ctx.obj["devices"]),
             verbose=verbose,
@@ -279,8 +331,9 @@ def flash(ctx, yes, start, chunk_timeout, chunk_retries, verbose, firmware):
     settings = ControllerSettings(
         serial_port=ctx.obj["port"],
         serial_baudrate=ctx.obj["baudrate"],
-        mqtt_host="argus.paris.inria.fr",
-        mqtt_port=8883,
+        mqtt_host=ctx.obj["mqtt_host"],
+        mqtt_port=ctx.obj["mqtt_port"],
+        network_id=ctx.obj["network_id"],
         adapter=ctx.obj["adapter"],
         devices=ctx.obj["devices"],
         verbose=verbose,
@@ -346,8 +399,9 @@ def monitor(ctx):
         settings = ControllerSettings(
             serial_port=ctx.obj["port"],
             serial_baudrate=ctx.obj["baudrate"],
-            mqtt_host="argus.paris.inria.fr",
-            mqtt_port=8883,
+            mqtt_host=ctx.obj["mqtt_host"],
+            mqtt_port=ctx.obj["mqtt_port"],
+            network_id=ctx.obj["network_id"],
             adapter=ctx.obj["adapter"],
             devices=ctx.obj["devices"],
         )
@@ -380,8 +434,9 @@ def status(ctx, verbose):
     settings = ControllerSettings(
         serial_port=ctx.obj["port"],
         serial_baudrate=ctx.obj["baudrate"],
-        mqtt_host="argus.paris.inria.fr",
-        mqtt_port=8883,
+        mqtt_host=ctx.obj["mqtt_host"],
+        mqtt_port=ctx.obj["mqtt_port"],
+        network_id=ctx.obj["network_id"],
         adapter=ctx.obj["adapter"],
         devices=ctx.obj["devices"],
         verbose=verbose,
@@ -403,8 +458,9 @@ def message(ctx, message):
     settings = ControllerSettings(
         serial_port=ctx.obj["port"],
         serial_baudrate=ctx.obj["baudrate"],
-        mqtt_host="argus.paris.inria.fr",
-        mqtt_port=8883,
+        mqtt_host=ctx.obj["mqtt_host"],
+        mqtt_port=ctx.obj["mqtt_port"],
+        network_id=ctx.obj["network_id"],
         adapter=ctx.obj["adapter"],
         devices=ctx.obj["devices"],
     )

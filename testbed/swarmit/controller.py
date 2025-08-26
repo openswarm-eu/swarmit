@@ -17,7 +17,8 @@ from tqdm import tqdm
 
 from testbed.swarmit.adapter import (
     GatewayAdapterBase,
-    MariLibAdapter,
+    MarilibCloudAdapter,
+    MarilibEdgeAdapter,
     MQTTAdapter,
     SerialAdapter,
 )
@@ -191,8 +192,10 @@ class ControllerSettings:
 
     serial_port: str = SERIAL_PORT_DEFAULT
     serial_baudrate: int = 1000000
-    mqtt_host: str = "argus.paris.inria.fr"
-    mqtt_port: int = 8883
+    mqtt_host: str = "localhost"
+    mqtt_port: int = 1883
+    mqtt_use_tls: bool = False
+    network_id: int = 1
     adapter: str = "serial"  # or "mqtt"
     devices: list[str] = dataclasses.field(default_factory=lambda: [])
     verbose: bool = False
@@ -217,9 +220,16 @@ class Controller:
             self._interface = MQTTAdapter(
                 self.settings.mqtt_host, self.settings.mqtt_port
             )
-        elif self.settings.adapter == "marilib":
-            self._interface = MariLibAdapter(
+        elif self.settings.adapter == "marilib-edge":
+            self._interface = MarilibEdgeAdapter(
                 self.settings.serial_port, self.settings.serial_baudrate
+            )
+        elif self.settings.adapter == "marilib-cloud":
+            self._interface = MarilibCloudAdapter(
+                self.settings.mqtt_host,
+                self.settings.mqtt_port,
+                self.settings.mqtt_use_tls,
+                self.settings.network_id,
             )
         else:
             try:
