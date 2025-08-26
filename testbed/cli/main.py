@@ -29,7 +29,9 @@ SERIAL_PORT_DEFAULT = get_default_port()
 BAUDRATE_DEFAULT = 1000000
 MQTT_HOST_DEFAULT = "localhost"
 MQTT_PORT_DEFAULT = 1883
-MARILIB_NETWORK_ID_DEFAULT = 1
+# Default network ID for SwarmIT tests is 0x12**
+# See https://crystalfree.atlassian.net/wiki/spaces/Mari/pages/3324903426/Registry+of+Mari+Network+IDs
+SWARMIT_NETWORK_ID_DEFAULT = 0x1200
 
 
 @click.group(context_settings=dict(help_option_names=["-h", "--help"]))
@@ -70,9 +72,9 @@ MARILIB_NETWORK_ID_DEFAULT = 1
 @click.option(
     "-n",
     "--network-id",
-    type=int,
-    default=MARILIB_NETWORK_ID_DEFAULT,
-    help=f"Marilib network ID to use. Default: {MARILIB_NETWORK_ID_DEFAULT}",
+    type=lambda x: int(x, 16),
+    default=SWARMIT_NETWORK_ID_DEFAULT,
+    help=f"Marilib network ID to use. Default: 0x{SWARMIT_NETWORK_ID_DEFAULT:04X}",
 )
 @click.option(
     "-a",
