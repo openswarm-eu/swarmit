@@ -38,9 +38,11 @@ class MarilibEdgeAdapter(GatewayAdapterBase):
 
     def on_event(self, event: EdgeEvent, event_data: MariNode | MariFrame):
         if event == EdgeEvent.NODE_JOINED:
-            print("[green]Node joined:[/]", event_data)
+            if self.verbose:
+                print("[green]Node joined:[/]", event_data)
         elif event == EdgeEvent.NODE_LEFT:
-            print("[orange]Node left:[/]", event_data)
+            if self.verbose:
+                print("[orange]Node left:[/]", event_data)
         elif event == EdgeEvent.NODE_DATA:
             try:
                 packet = Packet.from_bytes(event_data.payload)
@@ -49,7 +51,8 @@ class MarilibEdgeAdapter(GatewayAdapterBase):
                 return
             self.on_frame_received(event_data.header, packet)
 
-    def __init__(self, port: str, baudrate: int):
+    def __init__(self, port: str, baudrate: int, verbose: bool = False):
+        self.verbose = verbose
         self.mari = MarilibEdge(
             self.on_event, MarilibSerialAdapter(port, baudrate)
         )
@@ -64,8 +67,9 @@ class MarilibEdgeAdapter(GatewayAdapterBase):
     def init(self, on_frame_received: callable):
         self.on_frame_received = on_frame_received
         self._busy_wait(3)
-        print("[yellow]Mari nodes available:[/]")
-        print(self.mari.nodes)
+        if self.verbose:
+            print("[yellow]Mari nodes available:[/]")
+            print(self.mari.nodes)
 
     def close(self):
         pass
@@ -82,9 +86,11 @@ class MarilibCloudAdapter(GatewayAdapterBase):
 
     def on_event(self, event: EdgeEvent, event_data: MariNode | MariFrame):
         if event == EdgeEvent.NODE_JOINED:
-            print("[green]Node joined:[/]", event_data)
+            if self.verbose:
+                print("[green]Node joined:[/]", event_data)
         elif event == EdgeEvent.NODE_LEFT:
-            print("[orange]Node left:[/]", event_data)
+            if self.verbose:
+                print("[orange]Node left:[/]", event_data)
         elif event == EdgeEvent.NODE_DATA:
             try:
                 packet = Packet.from_bytes(event_data.payload)
@@ -93,7 +99,15 @@ class MarilibCloudAdapter(GatewayAdapterBase):
                 return
             self.on_frame_received(event_data.header, packet)
 
-    def __init__(self, host: str, port: int, use_tls: bool, network_id: int):
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        use_tls: bool,
+        network_id: int,
+        verbose: bool = False,
+    ):
+        self.verbose = verbose
         self.mari = MarilibCloud(
             self.on_event,
             MarilibMQTTAdapter(host, port, use_tls=use_tls, is_edge=False),
@@ -110,8 +124,9 @@ class MarilibCloudAdapter(GatewayAdapterBase):
     def init(self, on_frame_received: callable):
         self.on_frame_received = on_frame_received
         self._busy_wait(3)
-        print("[yellow]Mari nodes available:[/]")
-        print(self.mari.nodes)
+        if self.verbose:
+            print("[yellow]Mari nodes available:[/]")
+            print(self.mari.nodes)
 
     def close(self):
         pass

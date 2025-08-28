@@ -230,11 +230,13 @@ class Controller:
                 self.settings.mqtt_port,
                 self.settings.mqtt_use_tls,
                 self.settings.network_id,
+                verbose=self.settings.verbose,
             )
         else:
             self._interface = MarilibEdgeAdapter(
                 self.settings.serial_port,
                 self.settings.serial_baudrate,
+                verbose=self.settings.verbose,
             )
         self._interface.init(self.on_frame_received)
 
