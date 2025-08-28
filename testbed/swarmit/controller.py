@@ -5,13 +5,11 @@ import time
 from binascii import hexlify
 from dataclasses import dataclass
 
-import serial
 from cryptography.hazmat.primitives import hashes
 from dotbot.logger import LOGGER
 from dotbot.protocol import Frame, Packet, Payload
-from dotbot.serial_interface import SerialInterfaceException, get_default_port
+from dotbot.serial_interface import get_default_port
 from rich import print
-from rich.console import Console
 from rich.live import Live
 from rich.table import Table
 from tqdm import tqdm
@@ -20,8 +18,6 @@ from testbed.swarmit.adapter import (
     GatewayAdapterBase,
     MarilibCloudAdapter,
     MarilibEdgeAdapter,
-    MQTTAdapter,
-    SerialAdapter,
 )
 from testbed.swarmit.protocol import (
     PayloadMessage,
@@ -223,15 +219,7 @@ class Controller:
         self.transfer_data: dict[str, TransferDataStatus] = {}
         self._known_devices: dict[str, StatusType] = {}
         register_parsers()
-        if self.settings.adapter == "mqtt":
-            self._interface = MQTTAdapter(
-                self.settings.mqtt_host, self.settings.mqtt_port
-            )
-        elif self.settings.adapter == "marilib-edge":
-            self._interface = MarilibEdgeAdapter(
-                self.settings.serial_port, self.settings.serial_baudrate
-            )
-        elif self.settings.adapter == "marilib-cloud":
+        if self.settings.adapter == "cloud":
             self._interface = MarilibCloudAdapter(
                 self.settings.mqtt_host,
                 self.settings.mqtt_port,
@@ -239,16 +227,10 @@ class Controller:
                 self.settings.network_id,
             )
         else:
-            try:
-                self._interface = SerialAdapter(
-                    self.settings.serial_port, self.settings.serial_baudrate
-                )
-            except (
-                SerialInterfaceException,
-                serial.serialutil.SerialException,
-            ) as exc:
-                console = Console()
-                console.print(f"[bold red]Error:[/] {exc}")
+            self._interface = MarilibEdgeAdapter(
+                self.settings.serial_port,
+                self.settings.serial_baudrate,
+            )
         self._interface.init(self.on_frame_received)
 
     @property

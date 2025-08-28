@@ -79,11 +79,8 @@ SWARMIT_NETWORK_ID_DEFAULT = 0x1200
 @click.option(
     "-a",
     "--adapter",
-    type=click.Choice(
-        ["serial", "mqtt", "marilib-edge", "marilib-cloud"],
-        case_sensitive=True,
-    ),
-    default="serial",
+    type=click.Choice(["edge", "cloud"], case_sensitive=True),
+    default="edge",
     show_default=True,
     help="Choose the adapter to communicate with the gateway.",
 )
