@@ -20,7 +20,6 @@ from testbed.swarmit.controller import (
     ControllerSettings,
     ResetLocation,
     print_start_status,
-    print_status,
     print_stop_status,
     print_transfer_status,
 )
@@ -366,8 +365,6 @@ def status(ctx):
     data = controller.status()
     if not data:
         click.echo("No devices found.")
-    else:
-        print_status(data)
     controller.terminate()
 
 

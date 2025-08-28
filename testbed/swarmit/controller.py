@@ -10,8 +10,10 @@ from dotbot.logger import LOGGER
 from dotbot.protocol import Frame, Packet, Payload
 from dotbot.serial_interface import get_default_port
 from rich import print
+from rich.console import Group
 from rich.live import Live
 from rich.table import Table
+from rich.text import Text
 from tqdm import tqdm
 
 from testbed.swarmit.adapter import (
@@ -25,7 +27,6 @@ from testbed.swarmit.protocol import (
     PayloadOTAStartRequest,
     PayloadResetRequest,
     PayloadStartRequest,
-    PayloadStatusRequest,
     PayloadStopRequest,
     StatusType,
     SwarmitPayloadType,
@@ -34,6 +35,7 @@ from testbed.swarmit.protocol import (
 
 CHUNK_SIZE = 128
 COMMAND_TIMEOUT = 5
+STATUS_TIMEOUT = 2
 OTA_CHUNK_MAX_RETRIES_DEFAULT = 5
 OTA_CHUNK_TIMEOUT_DEFAULT = 0.5
 SERIAL_PORT_DEFAULT = get_default_port()
@@ -112,6 +114,22 @@ def print_status(status_data: dict[int, StatusType]) -> None:
                 f"{device_addr}",
                 f"{'[bold cyan]' if status == StatusType.Running else '[bold green]'}{status.name}",
             )
+
+
+def generate_status(status_data):
+    header = Text(
+        f"\n{len(status_data)} device{'s' if len(status_data) > 1 else ''} found\n"
+    )
+
+    table = Table()
+    table.add_column("Device Addr", style="magenta", no_wrap=True)
+    table.add_column("Status", style="green", justify="center")
+    for device_addr, status in sorted(status_data.items()):
+        table.add_row(
+            f"{device_addr}",
+            f"{'[bold cyan]' if status == StatusType.Running else '[bold green]'}{status.name}",
+        )
+    return Group(header, table)
 
 
 def print_start_status(
@@ -244,7 +262,8 @@ class Controller:
     def known_devices(self) -> dict[str, StatusType]:
         """Return the known devices."""
         if not self._known_devices:
-            self._known_devices = self.status()
+            wait_for_done(COMMAND_TIMEOUT, lambda: False)
+            self._known_devices = self.status_data
         return self._known_devices
 
     @property
@@ -324,18 +343,6 @@ class Controller:
             )
         elif (
             packet.payload_type
-            == SwarmitPayloadType.SWARMIT_NOTIFICATION_STARTED
-        ):
-            if device_addr not in self.started_data:
-                self.started_data.append(device_addr)
-        elif (
-            packet.payload_type
-            == SwarmitPayloadType.SWARMIT_NOTIFICATION_STOPPED
-        ):
-            if device_addr not in self.stopped_data:
-                self.stopped_data.append(device_addr)
-        elif (
-            packet.payload_type
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_START_ACK
         ):
             if device_addr not in self.start_ota_data.addrs:
@@ -397,19 +404,25 @@ class Controller:
 
     def status(self):
         """Request the status of the testbed."""
-        self.status_data: dict[str, StatusType] = {}
-        self.send_payload(
-            destination=BROADCAST_ADDRESS, payload=PayloadStatusRequest()
-        )
-        wait_for_done(COMMAND_TIMEOUT, lambda: False)
+        timeout = STATUS_TIMEOUT
+        with Live(
+            generate_status(self.status_data), refresh_per_second=4
+        ) as live:
+            while timeout > 0:
+                live.update(generate_status(self.status_data))
+                timeout -= 0.01
+                time.sleep(0.01)
         return self.status_data
 
     def _send_start(self, device_addr: str):
         def is_started():
             if int(device_addr, 16) == BROADCAST_ADDRESS:
-                return sorted(self.started_data) == sorted(self.ready_devices)
+                return all(
+                    self.status_data[addr] == StatusType.Running
+                    for addr in self.ready_devices
+                )
             else:
-                return device_addr in self.started_data
+                return self.status_data[device_addr] == StatusType.Running
 
         payload = PayloadStartRequest()
         self.send_payload(int(device_addr, 16), payload)
@@ -417,7 +430,6 @@ class Controller:
 
     def start(self):
         """Start the application."""
-        self.started_data = []
         ready_devices = self.ready_devices
         if not self.settings.devices:
             self._send_start(addr_to_hex(BROADCAST_ADDRESS))
@@ -426,16 +438,23 @@ class Controller:
                 if device_addr not in ready_devices:
                     continue
                 self._send_start(device_addr)
-        return self.started_data
+        return [
+            addr
+            for addr in self.status_data.keys()
+            if self.status_data[addr] == StatusType.Running
+        ]
 
     def _send_stop(self, device_addr: str):
         stoppable_devices = self.running_devices + self.resetting_devices
 
         def is_stopped():
             if int(device_addr, 16) == BROADCAST_ADDRESS:
-                return sorted(self.stopped_data) == sorted(stoppable_devices)
+                return all(
+                    self.status_data[addr] == StatusType.Bootloader
+                    for addr in stoppable_devices
+                )
             else:
-                return device_addr in self.stopped_data
+                return self.status_data[device_addr] == StatusType.Bootloader
 
         payload = PayloadStopRequest()
         self.send_payload(int(device_addr, 16), payload)
@@ -453,7 +472,11 @@ class Controller:
                 if device_addr not in stoppable_devices:
                     continue
                 self._send_stop(device_addr)
-        return self.stopped_data
+        return [
+            addr
+            for addr in self.status_data.keys()
+            if self.status_data[addr] == StatusType.Bootloader
+        ]
 
     def _send_reset(self, device_addr: int, location: ResetLocation):
         payload = PayloadResetRequest(
