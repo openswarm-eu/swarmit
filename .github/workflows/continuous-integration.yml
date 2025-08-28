@@ -10,15 +10,36 @@ on:
 
 jobs:
 
-  build:
+  build-bootloader-and-sample:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ["dotbot-v2", "dotbot-v3", "nrf5340dk"]
+        config: ["Debug", "Release"]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
           submodules: 'true'
-      - name: Build applications
-        run: make docker
+      - name: Build bootloader
+        run: BUILD_TARGET=${{ matrix.target }} BUILD_CONFIG=${{ matrix.config }} DOCKER_TARGETS=bootloader make docker
+      - name: Build sample
+        run: BUILD_TARGET=${{ matrix.target }} BUILD_CONFIG=${{ matrix.config }} DOCKER_TARGETS=sample make docker
+
+  build-netcore:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config: ["Debug", "Release"]
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          submodules: 'true'
+      - name: Build network core application
+        run: DOCKER_TARGETS=netcore make docker
 
   testbed-check:
     name: testbed-check (${{ matrix.os }}, python-${{ matrix.python-version }}

@@ -18,7 +18,7 @@ https://github.com/user-attachments/assets/eff63b07-216a-41fb-9062-2e0e56f03c20
 ### Get the code
 
 Swarmit depends on the [DotBot-firmware](https://github.com/DotBots/DotBot-firmware)
-and [Mira](https://github.com/DotBots/mari) repositories. They are included
+and [Mari](https://github.com/DotBots/mari) repositories. They are included
 in the codebase as [Git submodules](https://git-scm.com/book/en/v2/Git-Tools-Submodules).
 
 Use the following command to clone the Swarmit codebase locally:
@@ -35,7 +35,9 @@ Use Tools > Package manager to install the CMSIS 5 CMSIS-CORE, CMSIS-DSP and nRF
 
 To provision a device, follow the following steps:
 1. open [netcore.emProject](swarmit-netcore.emProject)
-and [bootloader.emProject](swarmit-bootloader-dotbot-v2.emProject) in SES
+   and [bootloader.emProject](swarmit-bootloader-dotbot-v3.emProject)
+   (or [bootloader.emProject](swarmit-bootloader-dotbot-v2.emProject) depending on
+   your robot version) in SES
 2. build and load the netcore application on the nRF53 network core,
 3. build and load the bootloader application on the nRF53 application core.
 
@@ -45,12 +47,12 @@ The device is now ready.
 
 The communication between the computer and the swarm devices is performed via a
 gateway board connected via USB to the computer.
-The gateway board is a Nordic nRF52840DK.
 
-The firmware to run on the gateway can also be compiled and flash using SES.
-The SES project to open is located at [gateway.emProject](swarmit-gateway-nrf52840dk.emProject).
+This gateway uses the [mari](https://github.com/dotbots/mari) network stack and
+the it must run the Mari gateway firmware, either Edge or Cloud version.
 
-After flashing the gateway firmware, LED1 on the DK should mari fast during 1s.
+The documentation to setup a Mari gateway is located
+[here](https://github.com/DotBots/mari/wiki/Getting-started#running-mari-network-on-your-computer).
 
 ### Python CLI script
 
@@ -80,9 +82,9 @@ Options:
   -P, --mqtt-port INTEGER         MQTT port. Default: 1883.
   -T, --mqtt-use_tls              Use TLS with MQTT.
   -n, --network-id INTEGER        Marilib network ID to use. Default: 1
-  -a, --adapter [serial|mqtt|marilib-edge|marilib-cloud]
+  -a, --adapter [edge|cloud]
                                   Choose the adapter to communicate with the
-                                  gateway.  [default: serial]
+                                  gateway.  [default: edge]
   -d, --devices TEXT              Subset list of devices to interact with,
                                   separated with ,
   -v, --verbose                   Enable verbose mode.

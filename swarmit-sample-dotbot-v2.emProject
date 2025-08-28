@@ -1,0 +1,81 @@
+<!DOCTYPE CrossStudio_Project_File>
+<solution Name="Sample" version="2" target="8">
+  <configuration
+    Name="Debug"
+    c_preprocessor_definitions="DEBUG"
+    gcc_debugging_level="Level 3"
+    gcc_omit_frame_pointer="Yes"
+    gcc_optimization_level="None" />
+  <configuration
+    Name="Release"
+    c_preprocessor_definitions="NDEBUG"
+    gcc_debugging_level="Level 2"
+    gcc_omit_frame_pointer="Yes"
+    gcc_optimization_level="Level 2 balanced" />
+  <project Name="sample">
+    <configuration
+      LIBRARY_IO_TYPE="RTT"
+      Name="Common"
+      Placement="Flash"
+      arm_architecture="v8M_Mainline"
+      arm_assembler_variant="SEGGER"
+      arm_compiler_variant="SEGGER"
+      arm_core_type="Cortex-M33"
+      arm_endian="Little"
+      arm_fpu_type="FPv5-SP-D16"
+      arm_fp_abi="Hard"
+      arm_linker_heap_size="1024"
+      arm_linker_process_stack_size="0"
+      arm_linker_stack_size="1024"
+      arm_rtl_variant="SEGGER"
+      arm_target_debug_interface_type="ADIv5"
+      arm_target_device_name="nRF5340_xxAA_Application"
+      arm_target_interface_type="SWD"
+      arm_use_builtins="Yes"
+      batch_build_configurations="Debug;Release"
+      build_intermediate_directory="Output/$(BuildTarget)/$(Configuration)/Obj"
+      build_output_directory="Output/$(BuildTarget)/$(Configuration)/Exe"
+      build_output_file_name="$(OutDir)/$(ProjectName)-$(BuildTarget)$(EXE)"
+      c_additional_options="-Wall;-Wextra;-Wunused-variable;-Wuninitialized;-Wmissing-field-initializers;-Wundef;-ffunction-sections;-fdata-sections"
+      c_only_additional_options="-Wno-missing-prototypes"
+      c_preprocessor_definitions="ARM_MATH_ARMV8MML;NRF5340_XXAA;NRF_APPLICATION;__NRF_FAMILY;CONFIG_NFCT_PINS_AS_GPIOS;NRF_TRUSTZONE_NONSECURE;BOARD_DOTBOT_V2"
+      c_user_include_directories="$(PackagesDir)/nRF/Device/Include;$(PackagesDir)/CMSIS_5/CMSIS/Core/Include"
+      debug_register_definition_file="$(ProjectDir)/Setup/nrf5340_application_Registers.xml"
+      debug_stack_pointer_start="__stack_end__"
+      debug_start_from_entry_point_symbol="No"
+      debug_target_connection="J-Link"
+      gcc_c_language_standard="gnu17"
+      gcc_cplusplus_language_standard="gnu++20"
+      gcc_enable_all_warnings="Yes"
+      gcc_entry_point="Reset_Handler"
+      link_dedupe_code="Yes"
+      link_time_optimization="No"
+      linker_additional_files="$(ProjectDir)/cmse_implib$(LIB)"
+      linker_additional_options="--gc-sections"
+      linker_memory_map_file="$(ProjectDir)/Setup/MemoryMap.xml"
+      linker_output_format="bin"
+      linker_printf_fmt_level="int"
+      linker_printf_fp_enabled="Float"
+      linker_printf_width_precision_supported="Yes"
+      linker_section_placement_file="Setup/flash_placement.xml"
+      macros="BuildTarget=dotbot-v2"
+      project_directory="sample"
+      project_type="Executable"
+      target_reset_script="Reset();"
+      target_script_file="$(ProjectDir)/Setup/nRF_Target.js"
+      target_trace_initialize_script="EnableTrace(&quot;$(TraceInterfaceType)&quot;)"
+      use_compiler_driver="Yes" />
+    <folder Name="Setup">
+      <file file_name="$(ProjectDir)/Setup/flash_placement.xml" />
+      <file file_name="$(ProjectDir)/Setup/MemoryMap.xml" />
+    </folder>
+    <folder Name="Source">
+      <file file_name="$(ProjectDir)/Source/main.c" />
+    </folder>
+    <folder Name="System">
+      <file file_name="$(ProjectDir)/System/fault_handlers.h" />
+      <file file_name="$(ProjectDir)/System/fault_handlers.c" />
+      <file file_name="$(ProjectDir)/System/startup.c" />
+    </folder>
+  </project>
+</solution>
