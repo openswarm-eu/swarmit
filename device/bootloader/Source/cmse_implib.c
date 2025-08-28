@@ -6,10 +6,12 @@
 #include <nrf.h>
 
 #include "cmse_implib.h"
+#include "board_config.h"
 #include "device.h"
 #include "ipc.h"
 #include "mari.h"
 #include "rng.h"
+#include "lh2.h"
 
 static __attribute__((aligned(8))) uint8_t _tx_data_buffer[UINT8_MAX];
 
@@ -65,4 +67,34 @@ __attribute__((cmse_nonsecure_entry)) void swarmit_log_data(uint8_t *data, size_
     ipc_shared_data.log.length = length;
     memcpy((void *)ipc_shared_data.log.data, data, length);
     NRF_IPC_S->TASKS_SEND[IPC_CHAN_LOG_EVENT] = 1;
+}
+
+__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_init(db_lh2_t *lh2) {
+    db_lh2_init(lh2, &db_lh2_d, &db_lh2_e);
+    db_lh2_start();
+}
+
+__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_start(void) {
+    db_lh2_start();
+}
+
+__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_stop(void) {
+    db_lh2_stop();
+}
+
+__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_process_location(db_lh2_t *lh2) {
+    db_lh2_process_location(lh2);
+}
+
+__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_position(swarmit_lh2_position_t *position) {
+    // TODO: to be done
+    (void)position;
+}
+
+__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_spim_isr(void) {
+    if (NRF_SPIM4_S->EVENTS_END) {
+        // Clear the Interrupt flag
+        NRF_SPIM4_S->EVENTS_END = 0;
+        db_lh2_handle_isr();
+    }
 }
