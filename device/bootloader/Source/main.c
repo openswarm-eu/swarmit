@@ -473,11 +473,8 @@ int main(void) {
     _control_loop_vars.initial_direction_compensated = false;
     _control_loop_vars.final_direction_compensated = false;
 
-    static const gpio_t _reg_pin = { .port = 0, .pin = 8 };
-    db_gpio_init(&_reg_pin, DB_GPIO_OUT);
-    db_gpio_set(&_reg_pin);
-
     // PWM, Motors and move library initialization
+    // Allows enable the regulator and relay switch (v3 only) pins
     db_move_init();
 
     // Status LED
