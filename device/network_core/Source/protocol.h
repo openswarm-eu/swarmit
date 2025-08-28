@@ -66,7 +66,6 @@ typedef struct __attribute__((packed)) {
 
 typedef struct __attribute__((packed)) {
     swrmt_request_type_t type;
-    uint64_t        device_id;
     uint8_t         data[255];
 } swrmt_request_t;
 

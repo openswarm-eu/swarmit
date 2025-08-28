@@ -31,7 +31,7 @@ MQTT_HOST_DEFAULT = "localhost"
 MQTT_PORT_DEFAULT = 1883
 # Default network ID for SwarmIT tests is 0x12**
 # See https://crystalfree.atlassian.net/wiki/spaces/Mari/pages/3324903426/Registry+of+Mari+Network+IDs
-SWARMIT_NETWORK_ID_DEFAULT = 0x1200
+SWARMIT_NETWORK_ID_DEFAULT = "1200"
 
 
 @click.group(context_settings=dict(help_option_names=["-h", "--help"]))
@@ -72,18 +72,15 @@ SWARMIT_NETWORK_ID_DEFAULT = 0x1200
 @click.option(
     "-n",
     "--network-id",
-    type=lambda x: int(x, 16),
+    type=str,
     default=SWARMIT_NETWORK_ID_DEFAULT,
-    help=f"Marilib network ID to use. Default: 0x{SWARMIT_NETWORK_ID_DEFAULT:04X}",
+    help=f"Marilib network ID to use. Default: 0x{SWARMIT_NETWORK_ID_DEFAULT}",
 )
 @click.option(
     "-a",
     "--adapter",
-    type=click.Choice(
-        ["serial", "mqtt", "marilib-edge", "marilib-cloud"],
-        case_sensitive=True,
-    ),
-    default="serial",
+    type=click.Choice(["edge", "cloud"], case_sensitive=True),
+    default="edge",
     show_default=True,
     help="Choose the adapter to communicate with the gateway.",
 )
@@ -92,7 +89,7 @@ SWARMIT_NETWORK_ID_DEFAULT = 0x1200
     "--devices",
     type=str,
     default="",
-    help="Subset list of devices to interact with, separated with ,",
+    help="Subset list of device addresses to interact with, separated with ,",
 )
 @click.option(
     "-v",
@@ -128,9 +125,9 @@ def main(
         mqtt_host=mqtt_host,
         mqtt_port=mqtt_port,
         mqtt_use_tls=mqtt_use_tls,
-        network_id=network_id,
+        network_id=int(network_id, 16),
         adapter=adapter,
-        devices=[e for e in devices.split(",") if e],
+        devices=[d for d in devices.split(",") if d],
         verbose=verbose,
     )
 
@@ -215,7 +212,7 @@ def stop(ctx):
 def reset(ctx, locations):
     """Reset robots locations.
 
-    Locations are provided as '<device_id>:<x>,<y>-<device_id>:<x>,<y>|...'
+    Locations are provided as '<device_addr>:<x>,<y>-<device_addr>:<x>,<y>|...'
     """
     try:
         controller = Controller(ctx.obj["settings"])
@@ -232,7 +229,7 @@ def reset(ctx, locations):
         print("No devices selected.")
         return
     locations = {
-        location.split(":")[0]: ResetLocation(
+        int(location.split(":")[0], 16): ResetLocation(
             pos_x=int(float(location.split(":")[1].split(",")[0]) * 1e6),
             pos_y=int(float(location.split(":")[1].split(",")[1]) * 1e6),
         )
@@ -301,14 +298,14 @@ def flash(ctx, yes, start, chunk_timeout, chunk_retries, firmware):
 
     devices = controller.settings.devices
     start_data = controller.start_ota(fw)
-    if (devices and sorted(start_data.ids) != sorted(devices)) or (
+    if (devices and sorted(start_data.addrs) != sorted(devices)) or (
         not devices
-        and sorted(start_data.ids) != sorted(controller.ready_devices)
+        and sorted(start_data.addrs) != sorted(controller.ready_devices)
     ):
         console = Console()
         console.print(
             "[bold red]Error:[/] some acknowledgments are missing "
-            f"({', '.join(sorted(set(controller.ready_devices).difference(set(start_data.ids))))}). "
+            f"({', '.join(sorted(set(controller.ready_devices).difference(set(start_data.addrs))))}). "
             "Aborting."
         )
         raise click.Abort()
@@ -335,7 +332,7 @@ def flash(ctx, yes, start, chunk_timeout, chunk_retries, firmware):
         started = controller.start()
         print_start_status(
             sorted(started),
-            sorted(set(start_data.ids).difference(set(started))),
+            sorted(set(start_data.addrs).difference(set(started))),
         )
     controller.terminate()
 
