@@ -55,7 +55,7 @@ class StartOtaData:
 
     chunks: int = 0
     fw_hash: bytes = b""
-    addrs: list[int] = dataclasses.field(default_factory=lambda: [])
+    addrs: list[str] = dataclasses.field(default_factory=lambda: [])
 
 
 @dataclass
@@ -90,6 +90,11 @@ class ResetLocation:
         return f"(x={self.pos_x}, y={self.pos_y})"
 
 
+def addr_to_hex(addr: int) -> str:
+    """Convert an address to its hexadecimal representation."""
+    return hexlify(addr.to_bytes(8, "big")).decode().upper()
+
+
 def print_status(status_data: dict[int, StatusType]) -> None:
     """Print the status of the devices."""
     print()
@@ -104,7 +109,7 @@ def print_status(status_data: dict[int, StatusType]) -> None:
         live.update(status_table)
         for device_addr, status in sorted(status_data.items()):
             status_table.add_row(
-                f"{hexlify(int(device_addr).to_bytes(8, "big")).decode()}",
+                f"{device_addr}",
                 f"{'[bold cyan]' if status == StatusType.Running else '[bold green]'}{status.name}",
             )
 
@@ -121,7 +126,7 @@ def print_start_status(
         live.update(status_table)
         for device_addr in sorted(stopped_data):
             status_table.add_row(
-                f"{hexlify(int(device_addr).to_bytes(8, "big")).decode()}",
+                f"{device_addr}",
                 "[bold green]:heavy_check_mark:[/]",
             )
         for device_id in sorted(not_started):
@@ -138,12 +143,12 @@ def print_stop_status(stopped_data: list[str], not_stopped: list[str]) -> None:
         live.update(status_table)
         for device_addr in sorted(stopped_data):
             status_table.add_row(
-                f"{hexlify(int(device_addr).to_bytes(8, "big")).decode()}",
+                f"{device_addr}",
                 "[bold green]:heavy_check_mark:[/]",
             )
         for device_addr in sorted(not_stopped):
             status_table.add_row(
-                f"{hexlify(int(device_addr).to_bytes(8, "big")).decode()}",
+                f"{device_addr}",
                 "[bold red]:x:[/]",
             )
 
@@ -173,7 +178,7 @@ def print_transfer_status(
                 else ("[bold red]", "[/]")
             )
             transfer_status_table.add_row(
-                f"{hexlify(int(device_addr).to_bytes(8, "big")).decode()}",
+                f"{device_addr}",
                 f"{len([chunk for chunk in status.chunks if bool(chunk.acked)])}/{start_data.chunks}",
                 f"{start_marker}{bool(status.hashes_match)}{stop_marker}",
             )
@@ -244,16 +249,15 @@ class Controller:
     def running_devices(self) -> list[str]:
         """Return the running devices."""
         return [
-            device_addr
-            for device_addr, status in self.known_devices.items()
+            addr
+            for addr, status in self.known_devices.items()
             if (
                 (
                     status == StatusType.Running
                     or status == StatusType.Programming
                 )
                 and (
-                    not self.settings.devices
-                    or device_addr in self.settings.devices
+                    not self.settings.devices or addr in self.settings.devices
                 )
             )
         ]
@@ -308,7 +312,7 @@ class Controller:
             print(Frame(header, packet))
         if packet.payload_type < SwarmitPayloadType.SWARMIT_REQUEST_STATUS:
             return
-        device_addr = f"{packet.header.source:08X}"
+        device_addr = f"{header.source:08X}"
         if (
             packet.payload_type
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_STATUS
@@ -332,8 +336,8 @@ class Controller:
             packet.payload_type
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_START_ACK
         ):
-            if device_addr not in self.start_ota_data.ids:
-                self.start_ota_data.ids.append(device_addr)
+            if device_addr not in self.start_ota_data.addrs:
+                self.start_ota_data.addrs.append(device_addr)
         elif (
             packet.payload_type
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_CHUNK_ACK
@@ -398,15 +402,15 @@ class Controller:
         wait_for_done(COMMAND_TIMEOUT, lambda: False)
         return self.status_data
 
-    def _send_start(self, device_addr: int):
+    def _send_start(self, device_addr: str):
         def is_started():
-            if device_addr == BROADCAST_ADDRESS:
+            if int(device_addr, 16) == BROADCAST_ADDRESS:
                 return sorted(self.started_data) == sorted(self.ready_devices)
             else:
                 return device_addr in self.started_data
 
         payload = PayloadStartRequest()
-        self.send_payload(device_addr, payload)
+        self.send_payload(int(device_addr, 16), payload)
         wait_for_done(COMMAND_TIMEOUT, is_started)
 
     def start(self):
@@ -414,7 +418,7 @@ class Controller:
         self.started_data = []
         ready_devices = self.ready_devices
         if not self.settings.devices:
-            self._send_start(BROADCAST_ADDRESS)
+            self._send_start(addr_to_hex(BROADCAST_ADDRESS))
         else:
             for device_addr in self.settings.devices:
                 if device_addr not in ready_devices:
@@ -422,25 +426,26 @@ class Controller:
                 self._send_start(device_addr)
         return self.started_data
 
-    def _send_stop(self, device_addr: int):
+    def _send_stop(self, device_addr: str):
         stoppable_devices = self.running_devices + self.resetting_devices
 
         def is_stopped():
-            if device_addr == BROADCAST_ADDRESS:
+            if int(device_addr, 16) == BROADCAST_ADDRESS:
                 return sorted(self.stopped_data) == sorted(stoppable_devices)
             else:
                 return device_addr in self.stopped_data
 
         payload = PayloadStopRequest()
-        self.send_payload(device_addr, payload)
+        self.send_payload(int(device_addr, 16), payload)
         wait_for_done(COMMAND_TIMEOUT, is_stopped)
 
     def stop(self):
         """Stop the application."""
         self.stopped_data = []
         stoppable_devices = self.running_devices + self.resetting_devices
+
         if not self.settings.devices:
-            self._send_stop(BROADCAST_ADDRESS)
+            self._send_stop(addr_to_hex(BROADCAST_ADDRESS))
         else:
             for device_addr in self.settings.devices:
                 if device_addr not in stoppable_devices:
@@ -464,7 +469,7 @@ class Controller:
             print(
                 f"Resetting device {device_addr} with location {locations[device_addr]}"
             )
-            self._send_reset(device_addr, locations[device_addr])
+            self._send_reset(int(device_addr, 16), locations[device_addr])
 
     def monitor(self):
         """Monitor the testbed."""
@@ -488,23 +493,23 @@ class Controller:
             for addr in self.settings.devices:
                 if addr not in running_devices:
                     continue
-                self._send_message(addr, message)
+                self._send_message(int(addr, 16), message)
 
-    def _send_start_ota(self, device_addr: int, firmware: bytes):
+    def _send_start_ota(self, device_addr: str, firmware: bytes):
         def is_start_ota_acknowledged():
-            if device_addr == BROADCAST_ADDRESS:
-                return sorted(self.start_ota_data.ids) == sorted(
+            if int(device_addr, 16) == BROADCAST_ADDRESS:
+                return sorted(self.start_ota_data.addrs) == sorted(
                     self.ready_devices
                 )
             else:
-                return device_addr in self.start_ota_data.ids
+                return device_addr in self.start_ota_data.addrs
 
         payload = PayloadOTAStartRequest(
             fw_length=len(firmware),
             fw_chunk_count=len(self.chunks),
             fw_hash=self.fw_hash,
         )
-        self.send_payload(device_addr, payload)
+        self.send_payload(int(device_addr, 16), payload)
         wait_for_done(COMMAND_TIMEOUT, is_start_ota_acknowledged)
 
     def start_ota(self, firmware) -> StartOtaData:
@@ -536,7 +541,7 @@ class Controller:
         self.start_ota_data.chunks = len(self.chunks)
         if not self.settings.devices:
             print("Broadcast start ota notification...")
-            self._send_start_ota(BROADCAST_ADDRESS, firmware)
+            self._send_start_ota(addr_to_hex(BROADCAST_ADDRESS), firmware)
         else:
             for addr in self.settings.devices:
                 print(f"Sending start ota notification to {addr}...")
@@ -544,10 +549,10 @@ class Controller:
         return self.start_ota_data
 
     def send_chunk(
-        self, chunk: DataChunk, device_addr: int, timeout: float, retries: int
+        self, chunk: DataChunk, device_addr: str, timeout: float, retries: int
     ):
         def is_chunk_acknowledged():
-            if device_addr == BROADCAST_ADDRESS:
+            if int(device_addr, 16) == BROADCAST_ADDRESS:
                 return sorted(self.transfer_data.keys()) == sorted(
                     self.ready_devices
                 ) and all(
@@ -574,8 +579,8 @@ class Controller:
                     count=chunk.size,
                     chunk=chunk.data,
                 )
-                self.send_payload(payload)
-                if device_addr == BROADCAST_ADDRESS:
+                self.send_payload(int(device_addr, 16), payload)
+                if int(device_addr, 16) == BROADCAST_ADDRESS:
                     for addr in self.ready_devices:
                         self.transfer_data[addr].chunks[
                             chunk.index

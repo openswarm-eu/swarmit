@@ -31,7 +31,7 @@ MQTT_HOST_DEFAULT = "localhost"
 MQTT_PORT_DEFAULT = 1883
 # Default network ID for SwarmIT tests is 0x12**
 # See https://crystalfree.atlassian.net/wiki/spaces/Mari/pages/3324903426/Registry+of+Mari+Network+IDs
-SWARMIT_NETWORK_ID_DEFAULT = 0x1200
+SWARMIT_NETWORK_ID_DEFAULT = "1200"
 
 
 @click.group(context_settings=dict(help_option_names=["-h", "--help"]))
@@ -72,9 +72,9 @@ SWARMIT_NETWORK_ID_DEFAULT = 0x1200
 @click.option(
     "-n",
     "--network-id",
-    type=lambda x: int(x, 16),
+    type=str,
     default=SWARMIT_NETWORK_ID_DEFAULT,
-    help=f"Marilib network ID to use. Default: 0x{SWARMIT_NETWORK_ID_DEFAULT:04X}",
+    help=f"Marilib network ID to use. Default: 0x{SWARMIT_NETWORK_ID_DEFAULT}",
 )
 @click.option(
     "-a",
@@ -125,9 +125,9 @@ def main(
         mqtt_host=mqtt_host,
         mqtt_port=mqtt_port,
         mqtt_use_tls=mqtt_use_tls,
-        network_id=network_id,
+        network_id=int(network_id, 16),
         adapter=adapter,
-        devices=[int(e, 16) for e in devices.split(",") if e],
+        devices=[d for d in devices.split(",") if d],
         verbose=verbose,
     )
 
