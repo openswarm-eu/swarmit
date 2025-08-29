@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from cryptography.hazmat.primitives import hashes
 from dotbot.logger import LOGGER
-from dotbot.protocol import Frame, Packet, Payload
+from dotbot.protocol import Packet, Payload
 from dotbot.serial_interface import get_default_port
 from rich import print
 from rich.console import Group
@@ -37,7 +37,7 @@ CHUNK_SIZE = 128
 COMMAND_TIMEOUT = 5
 STATUS_TIMEOUT = 2
 OTA_CHUNK_MAX_RETRIES_DEFAULT = 5
-OTA_CHUNK_TIMEOUT_DEFAULT = 0.5
+OTA_CHUNK_TIMEOUT_DEFAULT = 1
 SERIAL_PORT_DEFAULT = get_default_port()
 BROADCAST_ADDRESS = 0xFFFFFFFFFFFFFFFF
 
@@ -97,78 +97,33 @@ def addr_to_hex(addr: int) -> str:
     return hexlify(addr.to_bytes(8, "big")).decode().upper()
 
 
-def print_status(status_data: dict[int, StatusType]) -> None:
-    """Print the status of the devices."""
-    print()
-    print(
-        f"{len(status_data)} device{'s' if len(status_data) > 1 else ''} found"
-    )
-    print()
-    status_table = Table()
-    status_table.add_column("Device Addr", style="magenta", no_wrap=True)
-    status_table.add_column("Status", style="green", justify="center")
-    with Live(status_table, refresh_per_second=4) as live:
-        live.update(status_table)
-        for device_addr, status in sorted(status_data.items()):
-            status_table.add_row(
-                f"{device_addr}",
-                f"{'[bold cyan]' if status == StatusType.Running else '[bold green]'}{status.name}",
-            )
+def generate_status(status_data, devices=[], status_message="found"):
+    data = {
+        key: device
+        for key, device in status_data.items()
+        if (devices and key in devices) or (not devices)
+    }
+    if not data:
+        return Group(Text(f"\nNo device {status_message}\n"))
 
-
-def generate_status(status_data):
     header = Text(
-        f"\n{len(status_data)} device{'s' if len(status_data) > 1 else ''} found\n"
+        f"\n{len(data)} device{'s' if len(data) > 1 else ''} {status_message}\n"
     )
 
     table = Table()
     table.add_column("Device Addr", style="magenta", no_wrap=True)
-    table.add_column("Status", style="green", justify="center")
-    for device_addr, status in sorted(status_data.items()):
+    table.add_column(
+        "Status",
+        style="green",
+        justify="center",
+        width=max([len(m) for m in StatusType.__members__]),
+    )
+    for device_addr, status in sorted(data.items()):
         table.add_row(
             f"{device_addr}",
             f"{'[bold cyan]' if status == StatusType.Running else '[bold green]'}{status.name}",
         )
     return Group(header, table)
-
-
-def print_start_status(
-    stopped_data: list[str], not_started: list[str]
-) -> None:
-    """Print the start status."""
-    print("[bold]Start status:[/]")
-    status_table = Table()
-    status_table.add_column("Device Addr", style="magenta", no_wrap=True)
-    status_table.add_column("Status", style="green", justify="center")
-    with Live(status_table, refresh_per_second=4) as live:
-        live.update(status_table)
-        for device_addr in sorted(stopped_data):
-            status_table.add_row(
-                f"{device_addr}",
-                "[bold green]:heavy_check_mark:[/]",
-            )
-        for device_id in sorted(not_started):
-            status_table.add_row(f"{device_id}", "[bold red]:x:[/]")
-
-
-def print_stop_status(stopped_data: list[str], not_stopped: list[str]) -> None:
-    """Print the stop status."""
-    print("[bold]Stop status:[/]")
-    status_table = Table()
-    status_table.add_column("Device Addr", style="magenta", no_wrap=True)
-    status_table.add_column("Status", style="green", justify="center")
-    with Live(status_table, refresh_per_second=4) as live:
-        live.update(status_table)
-        for device_addr in sorted(stopped_data):
-            status_table.add_row(
-                f"{device_addr}",
-                "[bold green]:heavy_check_mark:[/]",
-            )
-        for device_addr in sorted(not_stopped):
-            status_table.add_row(
-                f"{device_addr}",
-                "[bold red]:x:[/]",
-            )
 
 
 def print_transfer_status(
@@ -328,9 +283,9 @@ class Controller:
 
     def on_frame_received(self, header, packet: Packet):
         """Handle the received frame."""
-        if self.settings.verbose:
-            print()
-            print(Frame(header, packet))
+        # if self.settings.verbose:
+        #     print()
+        #     print(Frame(header, packet))
         if packet.payload_type < SwarmitPayloadType.SWARMIT_REQUEST_STATUS:
             return
         device_addr = f"{header.source:08X}"
@@ -402,31 +357,30 @@ class Controller:
                 "Unknown payload type", payload_type=packet.payload_type
             )
 
-    def status(self):
-        """Request the status of the testbed."""
-        timeout = STATUS_TIMEOUT
+    def _live_status(
+        self, devices=[], timeout=STATUS_TIMEOUT, message="found"
+    ):
+        """Request the live status of the testbed."""
         with Live(
-            generate_status(self.status_data), refresh_per_second=4
+            generate_status(self.status_data, devices, status_message=message),
+            refresh_per_second=4,
         ) as live:
             while timeout > 0:
-                live.update(generate_status(self.status_data))
+                live.update(
+                    generate_status(
+                        self.status_data, devices, status_message=message
+                    )
+                )
                 timeout -= 0.01
                 time.sleep(0.01)
-        return self.status_data
+
+    def status(self):
+        """Request the status of the testbed."""
+        self._live_status(self.settings.devices)
 
     def _send_start(self, device_addr: str):
-        def is_started():
-            if int(device_addr, 16) == BROADCAST_ADDRESS:
-                return all(
-                    self.status_data[addr] == StatusType.Running
-                    for addr in self.ready_devices
-                )
-            else:
-                return self.status_data[device_addr] == StatusType.Running
-
         payload = PayloadStartRequest()
         self.send_payload(int(device_addr, 16), payload)
-        wait_for_done(COMMAND_TIMEOUT, is_started)
 
     def start(self):
         """Start the application."""
@@ -438,45 +392,24 @@ class Controller:
                 if device_addr not in ready_devices:
                     continue
                 self._send_start(device_addr)
-        return [
-            addr
-            for addr in self.status_data.keys()
-            if self.status_data[addr] == StatusType.Running
-        ]
-
-    def _send_stop(self, device_addr: str):
-        stoppable_devices = self.running_devices + self.resetting_devices
-
-        def is_stopped():
-            if int(device_addr, 16) == BROADCAST_ADDRESS:
-                return all(
-                    self.status_data[addr] == StatusType.Bootloader
-                    for addr in stoppable_devices
-                )
-            else:
-                return self.status_data[device_addr] == StatusType.Bootloader
-
-        payload = PayloadStopRequest()
-        self.send_payload(int(device_addr, 16), payload)
-        wait_for_done(COMMAND_TIMEOUT, is_stopped)
+        self._live_status(
+            ready_devices, timeout=COMMAND_TIMEOUT, message="to start"
+        )
 
     def stop(self):
         """Stop the application."""
-        self.stopped_data = []
         stoppable_devices = self.running_devices + self.resetting_devices
 
         if not self.settings.devices:
-            self._send_stop(addr_to_hex(BROADCAST_ADDRESS))
+            self.send_payload(BROADCAST_ADDRESS, PayloadStopRequest())
         else:
             for device_addr in self.settings.devices:
                 if device_addr not in stoppable_devices:
                     continue
-                self._send_stop(device_addr)
-        return [
-            addr
-            for addr in self.status_data.keys()
-            if self.status_data[addr] == StatusType.Bootloader
-        ]
+                self.send_payload(int(device_addr, 16), PayloadStopRequest())
+        self._live_status(
+            stoppable_devices, timeout=COMMAND_TIMEOUT, message="to stop"
+        )
 
     def _send_reset(self, device_addr: int, location: ResetLocation):
         payload = PayloadResetRequest(
@@ -520,11 +453,13 @@ class Controller:
                     continue
                 self._send_message(int(addr, 16), message)
 
-    def _send_start_ota(self, device_addr: str, firmware: bytes):
+    def _send_start_ota(
+        self, device_addr: str, devices_to_flash: set[str], firmware: bytes
+    ):
         def is_start_ota_acknowledged():
             if int(device_addr, 16) == BROADCAST_ADDRESS:
                 return sorted(self.start_ota_data.addrs) == sorted(
-                    self.ready_devices
+                    devices_to_flash
                 )
             else:
                 return device_addr in self.start_ota_data.addrs
@@ -564,22 +499,40 @@ class Controller:
         self.fw_hash = digest.finalize()
         self.start_ota_data.fw_hash = self.fw_hash
         self.start_ota_data.chunks = len(self.chunks)
+        # devices_to_flash = self.settings.devices
+        # if not devices_to_flash:
+        devices_to_flash = self.ready_devices
         if not self.settings.devices:
             print("Broadcast start ota notification...")
-            self._send_start_ota(addr_to_hex(BROADCAST_ADDRESS), firmware)
+            self._send_start_ota(
+                addr_to_hex(BROADCAST_ADDRESS), devices_to_flash, firmware
+            )
         else:
             for addr in self.settings.devices:
                 print(f"Sending start ota notification to {addr}...")
-                self._send_start_ota(addr, firmware)
-        return self.start_ota_data
+                self._send_start_ota(addr, devices_to_flash, firmware)
+        return {
+            "ota": self.start_ota_data,
+            "acked": sorted(self.start_ota_data.addrs),
+            "missed": sorted(
+                set(devices_to_flash).difference(
+                    set(self.start_ota_data.addrs)
+                )
+            ),
+        }
 
     def send_chunk(
-        self, chunk: DataChunk, device_addr: str, timeout: float, retries: int
+        self,
+        chunk: DataChunk,
+        device_addr: str,
+        devices_to_flash: set[str],
+        timeout: float,
+        retries: int,
     ):
         def is_chunk_acknowledged():
             if int(device_addr, 16) == BROADCAST_ADDRESS:
                 return sorted(self.transfer_data.keys()) == sorted(
-                    self.ready_devices
+                    devices_to_flash
                 ) and all(
                     [
                         status.chunks[chunk.index].acked
@@ -606,7 +559,7 @@ class Controller:
                 )
                 self.send_payload(int(device_addr, 16), payload)
                 if int(device_addr, 16) == BROADCAST_ADDRESS:
-                    for addr in self.ready_devices:
+                    for addr in devices_to_flash:
                         self.transfer_data[addr].chunks[
                             chunk.index
                         ].retries = retries_count
@@ -622,6 +575,7 @@ class Controller:
     def transfer(
         self,
         firmware,
+        devices,
         timeout=OTA_CHUNK_TIMEOUT_DEFAULT,
         retries=OTA_CHUNK_MAX_RETRIES_DEFAULT,
     ) -> dict[str, TransferDataStatus]:
@@ -638,9 +592,6 @@ class Controller:
             f"Loading firmware ({int(data_size / 1024)}kB)"
         )
         self.transfer_data = {}
-        devices = self.settings.devices
-        if not devices:
-            devices = self.ready_devices
         for device_addr in devices:
             self.transfer_data[device_addr] = TransferDataStatus()
             self.transfer_data[device_addr].chunks = [
@@ -649,10 +600,18 @@ class Controller:
             ]
         for chunk in self.chunks:
             if not self.settings.devices:
-                self.send_chunk(chunk, device_addr, timeout, retries)
+                self.send_chunk(
+                    chunk,
+                    addr_to_hex(BROADCAST_ADDRESS),
+                    devices,
+                    timeout,
+                    retries,
+                )
             else:
-                for addr in self.settings.devices:
-                    self.send_chunk(chunk, addr, timeout, retries)
+                for addr in devices:
+                    self.send_chunk(chunk, addr, devices, timeout, retries)
+                    time.sleep(0.1)
+            time.sleep(0.1)
             progress.update(chunk.size)
         progress.close()
         return self.transfer_data
