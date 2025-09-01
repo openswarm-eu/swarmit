@@ -33,11 +33,11 @@ from testbed.swarmit.protocol import (
     register_parsers,
 )
 
-CHUNK_SIZE = 128
+CHUNK_SIZE = 64
 COMMAND_TIMEOUT = 5
-STATUS_TIMEOUT = 2
+STATUS_TIMEOUT = 5
 OTA_CHUNK_MAX_RETRIES_DEFAULT = 5
-OTA_CHUNK_TIMEOUT_DEFAULT = 1
+OTA_CHUNK_TIMEOUT_DEFAULT = 5
 SERIAL_PORT_DEFAULT = get_default_port()
 BROADCAST_ADDRESS = 0xFFFFFFFFFFFFFFFF
 
@@ -48,6 +48,7 @@ class DataChunk:
 
     index: int
     size: int
+    sha: bytes
     data: bytes
 
 
@@ -78,7 +79,7 @@ class TransferDataStatus:
     """Class that holds transfer data status for a single device."""
 
     chunks: list[Chunk] = dataclasses.field(default_factory=lambda: [])
-    hashes_match: bool = False
+    success: bool = False
 
 
 @dataclass
@@ -139,21 +140,14 @@ def print_transfer_status(
     transfer_status_table.add_column(
         "Chunks acked", style="green", justify="center"
     )
-    transfer_status_table.add_column(
-        "Hashes match", style="green", justify="center"
-    )
+
     with Live(transfer_status_table, refresh_per_second=4) as live:
         live.update(transfer_status_table)
         for device_addr, status in sorted(status.items()):
-            start_marker, stop_marker = (
-                ("[bold green]", "[/]")
-                if bool(status.hashes_match) is True
-                else ("[bold red]", "[/]")
-            )
+            chunks_col_color = "[green]" if status.success else "[bold red]"
             transfer_status_table.add_row(
                 f"{device_addr}",
-                f"{len([chunk for chunk in status.chunks if bool(chunk.acked)])}/{start_data.chunks}",
-                f"{start_marker}{bool(status.hashes_match)}{stop_marker}",
+                f"{chunks_col_color}{len([chunk for chunk in status.chunks if bool(chunk.acked)])}/{start_data.chunks}",
             )
 
 
@@ -300,8 +294,9 @@ class Controller:
             packet.payload_type
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_START_ACK
         ):
-            if device_addr not in self.start_ota_data.addrs:
-                self.start_ota_data.addrs.append(device_addr)
+            if device_addr in self.start_ota_data.addrs:
+                return
+            self.start_ota_data.addrs.append(device_addr)
         elif (
             packet.payload_type
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_CHUNK_ACK
@@ -323,9 +318,6 @@ class Controller:
                 self.transfer_data[device_addr].chunks[
                     packet.payload.index
                 ].acked = 1
-            self.transfer_data[device_addr].hashes_match = (
-                packet.payload.hashes_match
-            )
         elif packet.payload_type in [
             SwarmitPayloadType.SWARMIT_NOTIFICATION_EVENT_GPIO,
             SwarmitPayloadType.SWARMIT_NOTIFICATION_EVENT_LOG,
@@ -467,7 +459,6 @@ class Controller:
         payload = PayloadOTAStartRequest(
             fw_length=len(firmware),
             fw_chunk_count=len(self.chunks),
-            fw_hash=self.fw_hash,
         )
         self.send_payload(int(device_addr, 16), payload)
         wait_for_done(COMMAND_TIMEOUT, is_start_ota_acknowledged)
@@ -489,18 +480,20 @@ class Controller:
                 chunk_idx * CHUNK_SIZE : chunk_idx * CHUNK_SIZE + chunk_size
             ]
             digest.update(data)
+            chunk_sha = hashes.Hash(hashes.SHA256())
+            chunk_sha.update(data)
             self.chunks.append(
                 DataChunk(
                     index=chunk_idx,
                     size=chunk_size,
+                    sha=chunk_sha.finalize()[
+                        :8
+                    ],  # the first 8 bytes should be enough
                     data=data,
                 )
             )
-        self.fw_hash = digest.finalize()
-        self.start_ota_data.fw_hash = self.fw_hash
+        self.start_ota_data.fw_hash = digest.finalize()
         self.start_ota_data.chunks = len(self.chunks)
-        # devices_to_flash = self.settings.devices
-        # if not devices_to_flash:
         devices_to_flash = self.ready_devices
         if not self.settings.devices:
             print("Broadcast start ota notification...")
@@ -508,9 +501,10 @@ class Controller:
                 addr_to_hex(BROADCAST_ADDRESS), devices_to_flash, firmware
             )
         else:
-            for addr in self.settings.devices:
+            for addr in devices_to_flash:
                 print(f"Sending start ota notification to {addr}...")
                 self._send_start_ota(addr, devices_to_flash, firmware)
+                time.sleep(0.2)
         return {
             "ota": self.start_ota_data,
             "acked": sorted(self.start_ota_data.addrs),
@@ -555,6 +549,7 @@ class Controller:
                 payload = PayloadOTAChunkRequest(
                     index=chunk.index,
                     count=chunk.size,
+                    sha=chunk.sha,
                     chunk=chunk.data,
                 )
                 self.send_payload(int(device_addr, 16), payload)
@@ -610,8 +605,15 @@ class Controller:
             else:
                 for addr in devices:
                     self.send_chunk(chunk, addr, devices, timeout, retries)
-                    time.sleep(0.1)
-            time.sleep(0.1)
+                    time.sleep(1)
+            time.sleep(1)
             progress.update(chunk.size)
         progress.close()
+        for device in devices:
+            device_data = self.transfer_data.get(device)
+            if device_data:
+                device_data.success = all(
+                    chunk.acked for chunk in device_data.chunks
+                )
+                self.transfer_data[device] = device_data
         return self.transfer_data

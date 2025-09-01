@@ -269,8 +269,8 @@ def flash(ctx, yes, start, chunk_timeout, chunk_retries, firmware):
     if start_data["missed"]:
         console = Console()
         console.print(
-            "[bold red]Error:[/] some acknowledgments are missing "
-            f"({', '.join(sorted(set(start_data["missed"])))}). "
+            f"[bold red]Error:[/] {len(start_data["missed"])} acknowledgments "
+            f"are missing ({', '.join(sorted(set(start_data["missed"])))}). "
             "Aborting."
         )
         controller.stop()
@@ -293,10 +293,10 @@ def flash(ctx, yes, start, chunk_timeout, chunk_retries, firmware):
     if controller.settings.verbose:
         print("\n[b]Transfer data:[/]")
         pprint(data, indent_guides=False, expand_all=True)
-    if not all([value.hashes_match for value in data.values()]):
+    if all([device.success for device in data.values()]) is False:
         controller.terminate()
         console = Console()
-        console.print("[bold red]Error:[/] Hashes do not match.")
+        console.print("[bold red]Error:[/] Transfer failed.")
         raise click.Abort()
 
     if start is True:

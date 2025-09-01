@@ -503,9 +503,13 @@ int main(void) {
             _bootloader_vars.notification_buffer[length++] = SWRMT_NOTIFICATION_OTA_CHUNK_ACK;
             memcpy(_bootloader_vars.notification_buffer + length, (void *)&ipc_shared_data.ota.chunk_index, sizeof(uint32_t));
             length += sizeof(uint32_t);
-            _bootloader_vars.notification_buffer[length++] = ipc_shared_data.ota.hashes_match;
             ipc_shared_data.ota.last_chunk_acked = ipc_shared_data.ota.chunk_index;
             mari_node_tx(_bootloader_vars.notification_buffer, length);
+
+            // If last chunk, finalize computed hash, set back to ready state
+            if (ipc_shared_data.ota.chunk_index == ipc_shared_data.ota.chunk_count - 1) {
+                ipc_shared_data.status = SWRMT_APPLICATION_READY;
+            }
         }
 
         if (_bootloader_vars.start_application) {

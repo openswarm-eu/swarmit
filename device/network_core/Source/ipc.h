@@ -65,7 +65,6 @@ typedef struct __attribute__((packed)) {
     uint32_t chunk_size;
     int32_t  last_chunk_acked;
     uint8_t chunk[INT8_MAX + 1];
-    uint8_t hashes_match;
 } ipc_ota_data_t;
 
 typedef struct __attribute__((packed)) {
