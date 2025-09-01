@@ -30,8 +30,6 @@ class SwarmitPayloadType(IntEnum):
 
     # Notifications
     SWARMIT_NOTIFICATION_STATUS = 0x90
-    SWARMIT_NOTIFICATION_STARTED = 0x91
-    SWARMIT_NOTIFICATION_STOPPED = 0x92
     SWARMIT_NOTIFICATION_OTA_START_ACK = 0x93
     SWARMIT_NOTIFICATION_OTA_CHUNK_ACK = 0x94
     SWARMIT_NOTIFICATION_EVENT_GPIO = 0x95
@@ -93,15 +91,11 @@ class PayloadOTAStartRequest(Payload):
             PayloadFieldMetadata(
                 name="fw_chunk_counts", disp="chunks", length=4
             ),
-            PayloadFieldMetadata(
-                name="fw_hash", disp="hash.", type_=bytes, length=32
-            ),
         ]
     )
 
     fw_length: int = 0
     fw_chunk_count: int = 0
-    fw_hash: bytes = dataclasses.field(default_factory=lambda: bytearray)
 
 
 @dataclass
@@ -112,12 +106,14 @@ class PayloadOTAChunkRequest(Payload):
         default_factory=lambda: [
             PayloadFieldMetadata(name="index", disp="idx", length=4),
             PayloadFieldMetadata(name="count", disp="size"),
+            PayloadFieldMetadata(name="sha", type_=bytes, length=8),
             PayloadFieldMetadata(name="chunk", type_=bytes, length=0),
         ]
     )
 
     index: int = 0
     count: int = 0
+    sha: bytes = dataclasses.field(default_factory=lambda: bytearray)
     chunk: bytes = dataclasses.field(default_factory=lambda: bytearray)
 
 
@@ -138,24 +134,6 @@ class PayloadStatusNotification(Payload):
 
 
 @dataclass
-class PayloadStartedNotification(Payload):
-    """Dataclass that holds an application started notification packet."""
-
-    metadata: list[PayloadFieldMetadata] = dataclasses.field(
-        default_factory=lambda: []
-    )
-
-
-@dataclass
-class PayloadStoppedNotification(Payload):
-    """Dataclass that holds an application stopped notification packet."""
-
-    metadata: list[PayloadFieldMetadata] = dataclasses.field(
-        default_factory=lambda: []
-    )
-
-
-@dataclass
 class PayloadOTAStartAckNotification(Payload):
     """Dataclass that holds an application OTA start ACK notification packet."""
 
@@ -171,12 +149,10 @@ class PayloadOTAChunkAckNotification(Payload):
     metadata: list[PayloadFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
             PayloadFieldMetadata(name="index", disp="idx", length=4),
-            PayloadFieldMetadata(name="hashes_match", disp="match"),
         ]
     )
 
     index: int = 0
-    hashes_match: int = 0
 
 
 @dataclass
@@ -239,14 +215,6 @@ def register_parsers():
     register_parser(
         SwarmitPayloadType.SWARMIT_NOTIFICATION_STATUS,
         PayloadStatusNotification,
-    )
-    register_parser(
-        SwarmitPayloadType.SWARMIT_NOTIFICATION_STARTED,
-        PayloadStartedNotification,
-    )
-    register_parser(
-        SwarmitPayloadType.SWARMIT_NOTIFICATION_STOPPED,
-        PayloadStoppedNotification,
     )
     register_parser(
         SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_START_ACK,

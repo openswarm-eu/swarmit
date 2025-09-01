@@ -49,6 +49,8 @@ class MarilibEdgeAdapter(GatewayAdapterBase):
             except (ValueError, ProtocolPayloadParserException) as exc:
                 print(f"[red]Error parsing packet: {exc}[/]")
                 return
+            if not hasattr(self, "on_frame_received"):
+                return
             self.on_frame_received(event_data.header, packet)
 
     def __init__(self, port: str, baudrate: int, verbose: bool = False):
@@ -66,8 +68,8 @@ class MarilibEdgeAdapter(GatewayAdapterBase):
 
     def init(self, on_frame_received: callable):
         self.on_frame_received = on_frame_received
-        self._busy_wait(3)
         if self.verbose:
+            self._busy_wait(3)
             print("[yellow]Mari nodes available:[/]")
             print(self.mari.nodes)
 
@@ -97,6 +99,8 @@ class MarilibCloudAdapter(GatewayAdapterBase):
             except (ValueError, ProtocolPayloadParserException) as exc:
                 print(f"[red]Error parsing packet: {exc}[/]")
                 return
+            if not hasattr(self, "on_frame_received"):
+                return
             self.on_frame_received(event_data.header, packet)
 
     def __init__(
@@ -123,8 +127,8 @@ class MarilibCloudAdapter(GatewayAdapterBase):
 
     def init(self, on_frame_received: callable):
         self.on_frame_received = on_frame_received
-        self._busy_wait(3)
         if self.verbose:
+            self._busy_wait(3)
             print("[yellow]Mari nodes available:[/]")
             print(self.mari.nodes)
 

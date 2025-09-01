@@ -15,11 +15,10 @@
 #include <nrf.h>
 
 #define GPIO_P0_PIN (28)  // LED0 on nRF5340DK
-#define HEADER_LENGTH 19  // Version (1B) | Packet Type (1B) | Destination (8B) | Source (8B) = 19B total
 
 typedef void (*ipc_isr_cb_t)(const uint8_t *, size_t);
 typedef struct __attribute__((packed)) {
-    uint64_t device_id;
+    uint8_t type;
     uint8_t length;
     uint8_t content[UINT8_MAX];
 } msg_packet_t;
@@ -32,9 +31,9 @@ static bool _timer_running = false;
 
 static void _rx_data_callback(const uint8_t *data, size_t length) {
     (void)length;
-    msg_packet_t *msg = (msg_packet_t *)(data + HEADER_LENGTH);
+    msg_packet_t *msg = (msg_packet_t *)(data);
     msg->content[msg->length] = 0;
-    printf("Message received (%dB): %s\n", msg->length, msg->content);
+    printf("Message (type: %02X) received (%dB): %s\n", msg->type, msg->length, (char *)msg->content);
 }
 
 static void delay_ms(uint32_t ms) {
