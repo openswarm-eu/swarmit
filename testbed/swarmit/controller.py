@@ -605,8 +605,8 @@ class Controller:
             else:
                 for addr in devices:
                     self.send_chunk(chunk, addr, devices, timeout, retries)
-                    time.sleep(1)
-            time.sleep(1)
+                    # time.sleep(1)
+            # time.sleep(1)
             progress.update(chunk.size)
         progress.close()
         for device in devices:

@@ -68,8 +68,8 @@ class MarilibEdgeAdapter(GatewayAdapterBase):
 
     def init(self, on_frame_received: callable):
         self.on_frame_received = on_frame_received
-        self._busy_wait(3)
         if self.verbose:
+            self._busy_wait(3)
             print("[yellow]Mari nodes available:[/]")
             print(self.mari.nodes)
 
@@ -127,8 +127,8 @@ class MarilibCloudAdapter(GatewayAdapterBase):
 
     def init(self, on_frame_received: callable):
         self.on_frame_received = on_frame_received
-        self._busy_wait(3)
         if self.verbose:
+            self._busy_wait(3)
             print("[yellow]Mari nodes available:[/]")
             print(self.mari.nodes)
 

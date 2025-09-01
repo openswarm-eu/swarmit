@@ -252,7 +252,7 @@ def flash(ctx, yes, start, chunk_timeout, chunk_retries, firmware):
     fw = bytearray(firmware.read())
     controller = Controller(ctx.obj["settings"])
     if not controller.ready_devices:
-        console.print("[bold red]Error:[/] No ready devices found. Exiting.")
+        console.print("[bold red]Error:[/] No ready device found. Exiting.")
         controller.terminate()
         return
     print(
