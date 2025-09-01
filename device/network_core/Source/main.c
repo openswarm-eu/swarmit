@@ -79,8 +79,8 @@ static void _handle_packet(uint8_t *packet, uint8_t length) {
         return;
     }
 
-    ipc_shared_data.rx_pdu.length = length - 2;
-    memcpy((uint8_t *)ipc_shared_data.rx_pdu.buffer, packet, length - 2);
+    ipc_shared_data.rx_pdu.length = length;
+    memcpy((uint8_t *)ipc_shared_data.rx_pdu.buffer, packet, length);
     _app_vars.data_received = true;
 }
 
