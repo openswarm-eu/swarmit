@@ -37,7 +37,7 @@ CHUNK_SIZE = 64
 COMMAND_TIMEOUT = 5
 STATUS_TIMEOUT = 5
 OTA_CHUNK_MAX_RETRIES_DEFAULT = 5
-OTA_CHUNK_TIMEOUT_DEFAULT = 5
+OTA_CHUNK_TIMEOUT_DEFAULT = 1
 SERIAL_PORT_DEFAULT = get_default_port()
 BROADCAST_ADDRESS = 0xFFFFFFFFFFFFFFFF
 
@@ -59,6 +59,7 @@ class StartOtaData:
     chunks: int = 0
     fw_hash: bytes = b""
     addrs: list[str] = dataclasses.field(default_factory=lambda: [])
+    retries: int = 0
 
 
 @dataclass
@@ -456,12 +457,25 @@ class Controller:
             else:
                 return device_addr in self.start_ota_data.addrs
 
+        timeout = 1
+        max_retries = 10
+
         payload = PayloadOTAStartRequest(
             fw_length=len(firmware),
             fw_chunk_count=len(self.chunks),
         )
-        self.send_payload(int(device_addr, 16), payload)
-        wait_for_done(COMMAND_TIMEOUT, is_start_ota_acknowledged)
+        send_time = time.time()
+        send = True
+        while (
+            not is_start_ota_acknowledged()
+            and self.start_ota_data.retries <= max_retries
+        ):
+            if send is True:
+                self.send_payload(int(device_addr, 16), payload)
+                send_time = time.time()
+                self.start_ota_data.retries += 1
+            time.sleep(0.001)
+            send = time.time() - send_time > timeout
 
     def start_ota(self, firmware) -> StartOtaData:
         """Start the OTA process."""
@@ -541,17 +555,17 @@ class Controller:
                     .acked
                 )
 
+        payload = PayloadOTAChunkRequest(
+            index=chunk.index,
+            count=chunk.size,
+            sha=chunk.sha,
+            chunk=chunk.data,
+        )
         send_time = time.time()
         send = True
         retries_count = 0
         while not is_chunk_acknowledged() and retries_count <= retries:
             if send is True:
-                payload = PayloadOTAChunkRequest(
-                    index=chunk.index,
-                    count=chunk.size,
-                    sha=chunk.sha,
-                    chunk=chunk.data,
-                )
                 self.send_payload(int(device_addr, 16), payload)
                 if int(device_addr, 16) == BROADCAST_ADDRESS:
                     for addr in devices_to_flash:

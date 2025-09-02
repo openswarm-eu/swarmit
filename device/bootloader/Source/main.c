@@ -50,6 +50,7 @@ typedef struct {
     uint8_t     notification_buffer[255]  __attribute__((aligned));
     uint32_t    base_addr;
     bool        ota_start_request;
+    bool        ota_require_erase;
     bool        ota_chunk_request;
     bool        start_application;
 #if defined(USE_LH2)
@@ -442,6 +443,7 @@ int main(void) {
     }
 
     _bootloader_vars.base_addr = SWARMIT_BASE_ADDRESS;
+    _bootloader_vars.ota_require_erase = true;
 
 #if defined(USE_LH2)
     // Initialize current angle to invalid value to force a recomputation when reset is called
@@ -474,15 +476,18 @@ int main(void) {
         if (_bootloader_vars.ota_start_request) {
             _bootloader_vars.ota_start_request = false;
 
-            // Erase non secure flash
-            uint32_t pages_count = (ipc_shared_data.ota.image_size / FLASH_PAGE_SIZE) + (ipc_shared_data.ota.image_size % FLASH_PAGE_SIZE != 0);
-            printf("Pages to erase: %u\n", pages_count);
-            for (uint32_t page = 0; page < pages_count; page++) {
-                uint32_t addr = _bootloader_vars.base_addr + page * FLASH_PAGE_SIZE;
-                printf("Erasing page %u at %p\n", page + 16, (uint32_t *)addr);
-                nvmc_page_erase(page + 16);
+            if (_bootloader_vars.ota_require_erase) {
+                // Erase non secure flash
+                uint32_t pages_count = (ipc_shared_data.ota.image_size / FLASH_PAGE_SIZE) + (ipc_shared_data.ota.image_size % FLASH_PAGE_SIZE != 0);
+                printf("Pages to erase: %u\n", pages_count);
+                for (uint32_t page = 0; page < pages_count; page++) {
+                    uint32_t addr = _bootloader_vars.base_addr + page * FLASH_PAGE_SIZE;
+                    printf("Erasing page %u at %p\n", page + 16, (uint32_t *)addr);
+                    nvmc_page_erase(page + 16);
+                }
+                printf("Erasing done\n");
+                _bootloader_vars.ota_require_erase = false;
             }
-            printf("Erasing done\n");
 
             // Notify erase is done
             size_t length = 0;
@@ -493,10 +498,13 @@ int main(void) {
         if (_bootloader_vars.ota_chunk_request) {
             _bootloader_vars.ota_chunk_request = false;
 
-            // Write chunk to flash
-            uint32_t addr = _bootloader_vars.base_addr + ipc_shared_data.ota.chunk_index * SWRMT_OTA_CHUNK_SIZE;
-            printf("Writing chunk %d/%d at address %p\n", ipc_shared_data.ota.chunk_index, ipc_shared_data.ota.chunk_count - 1, (uint32_t *)addr);
-            nvmc_write((uint32_t *)addr, (void *)ipc_shared_data.ota.chunk, ipc_shared_data.ota.chunk_size);
+            if (ipc_shared_data.ota.last_chunk_acked != (int32_t)ipc_shared_data.ota.chunk_index) {
+                // Write chunk to flash
+                uint32_t addr = _bootloader_vars.base_addr + ipc_shared_data.ota.chunk_index * SWRMT_OTA_CHUNK_SIZE;
+                printf("Writing chunk %d/%d at address %p\n", ipc_shared_data.ota.chunk_index, ipc_shared_data.ota.chunk_count - 1, (uint32_t *)addr);
+                nvmc_write((uint32_t *)addr, (void *)ipc_shared_data.ota.chunk, ipc_shared_data.ota.chunk_size);
+                _bootloader_vars.ota_require_erase = true;
+            }
 
             // Notify chunk has been written
             size_t length = 0;
