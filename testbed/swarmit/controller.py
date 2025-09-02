@@ -34,10 +34,10 @@ from testbed.swarmit.protocol import (
 )
 
 CHUNK_SIZE = 64
-COMMAND_TIMEOUT = 5
+COMMAND_TIMEOUT = 6
 STATUS_TIMEOUT = 5
-OTA_CHUNK_MAX_RETRIES_DEFAULT = 5
-OTA_CHUNK_TIMEOUT_DEFAULT = 5
+OTA_MAX_RETRIES_DEFAULT = 10
+OTA_ACK_TIMEOUT_DEFAULT = 3
 SERIAL_PORT_DEFAULT = get_default_port()
 BROADCAST_ADDRESS = 0xFFFFFFFFFFFFFFFF
 
@@ -59,6 +59,7 @@ class StartOtaData:
     chunks: int = 0
     fw_hash: bytes = b""
     addrs: list[str] = dataclasses.field(default_factory=lambda: [])
+    retries: int = 0
 
 
 @dataclass
@@ -173,6 +174,8 @@ class ControllerSettings:
     network_id: int = 1
     adapter: str = "serial"  # or "mqtt", "marilib-edge", "marilib-cloud"
     devices: list[str] = dataclasses.field(default_factory=lambda: [])
+    ota_max_retries: int = OTA_MAX_RETRIES_DEFAULT
+    ota_timeout: float = OTA_ACK_TIMEOUT_DEFAULT
     verbose: bool = False
 
 
@@ -460,8 +463,18 @@ class Controller:
             fw_length=len(firmware),
             fw_chunk_count=len(self.chunks),
         )
-        self.send_payload(int(device_addr, 16), payload)
-        wait_for_done(COMMAND_TIMEOUT, is_start_ota_acknowledged)
+        send_time = time.time()
+        send = True
+        while (
+            not is_start_ota_acknowledged()
+            and self.start_ota_data.retries <= self.settings.ota_max_retries
+        ):
+            if send is True:
+                self.send_payload(int(device_addr, 16), payload)
+                send_time = time.time()
+                self.start_ota_data.retries += 1
+            time.sleep(0.001)
+            send = time.time() - send_time > self.settings.ota_timeout
 
     def start_ota(self, firmware) -> StartOtaData:
         """Start the OTA process."""
@@ -520,8 +533,6 @@ class Controller:
         chunk: DataChunk,
         device_addr: str,
         devices_to_flash: set[str],
-        timeout: float,
-        retries: int,
     ):
         def is_chunk_acknowledged():
             if int(device_addr, 16) == BROADCAST_ADDRESS:
@@ -541,17 +552,24 @@ class Controller:
                     .acked
                 )
 
+        payload = PayloadOTAChunkRequest(
+            index=chunk.index,
+            count=chunk.size,
+            sha=chunk.sha,
+            chunk=chunk.data,
+        )
         send_time = time.time()
         send = True
         retries_count = 0
-        while not is_chunk_acknowledged() and retries_count <= retries:
+        while (
+            not is_chunk_acknowledged()
+            and retries_count <= self.settings.ota_max_retries
+        ):
             if send is True:
-                payload = PayloadOTAChunkRequest(
-                    index=chunk.index,
-                    count=chunk.size,
-                    sha=chunk.sha,
-                    chunk=chunk.data,
-                )
+                if self.settings.verbose:
+                    print(
+                        f"Sending chunk {chunk.index} to {device_addr} (retries: {retries_count})"
+                    )
                 self.send_payload(int(device_addr, 16), payload)
                 if int(device_addr, 16) == BROADCAST_ADDRESS:
                     for addr in devices_to_flash:
@@ -565,27 +583,23 @@ class Controller:
                 send_time = time.time()
                 retries_count += 1
             time.sleep(0.001)
-            send = time.time() - send_time > timeout
+            send = time.time() - send_time > self.settings.ota_timeout
 
-    def transfer(
-        self,
-        firmware,
-        devices,
-        timeout=OTA_CHUNK_TIMEOUT_DEFAULT,
-        retries=OTA_CHUNK_MAX_RETRIES_DEFAULT,
-    ) -> dict[str, TransferDataStatus]:
+    def transfer(self, firmware, devices) -> dict[str, TransferDataStatus]:
         """Transfer the firmware to the devices."""
         data_size = len(firmware)
-        progress = tqdm(
-            range(0, data_size),
-            unit="B",
-            unit_scale=False,
-            colour="green",
-            ncols=100,
-        )
-        progress.set_description(
-            f"Loading firmware ({int(data_size / 1024)}kB)"
-        )
+        use_progress_bar = not self.settings.verbose
+        if use_progress_bar:
+            progress = tqdm(
+                range(0, data_size),
+                unit="B",
+                unit_scale=False,
+                colour="green",
+                ncols=100,
+            )
+            progress.set_description(
+                f"Loading firmware ({int(data_size / 1024)}kB)"
+            )
         self.transfer_data = {}
         for device_addr in devices:
             self.transfer_data[device_addr] = TransferDataStatus()
@@ -599,16 +613,14 @@ class Controller:
                     chunk,
                     addr_to_hex(BROADCAST_ADDRESS),
                     devices,
-                    timeout,
-                    retries,
                 )
             else:
                 for addr in devices:
-                    self.send_chunk(chunk, addr, devices, timeout, retries)
-                    # time.sleep(1)
-            # time.sleep(1)
-            progress.update(chunk.size)
-        progress.close()
+                    self.send_chunk(chunk, addr, devices)
+            if use_progress_bar:
+                progress.update(chunk.size)
+        if use_progress_bar:
+            progress.close()
         for device in devices:
             device_data = self.transfer_data.get(device)
             if device_data:

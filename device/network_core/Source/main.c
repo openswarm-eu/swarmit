@@ -188,7 +188,7 @@ int main(void) {
                     break;
                 case SWRMT_REQUEST_OTA_START:
                 {
-                    if (ipc_shared_data.status != SWRMT_APPLICATION_READY || ipc_shared_data.status == SWRMT_APPLICATION_PROGRAMMING) {
+                    if (ipc_shared_data.status != SWRMT_APPLICATION_READY && ipc_shared_data.status != SWRMT_APPLICATION_PROGRAMMING) {
                         break;
                     }
                     ipc_shared_data.ota.last_chunk_acked = -1;
@@ -209,30 +209,39 @@ int main(void) {
                     }
 
                     const swrmt_ota_chunk_pkt_t *pkt = (const swrmt_ota_chunk_pkt_t *)req->data;
-                    mutex_lock();
                     ipc_shared_data.ota.chunk_index = pkt->index;
 
-                    if (ipc_shared_data.ota.last_chunk_acked == (int32_t)ipc_shared_data.ota.chunk_index) {
+                    // Check chunk index is valid
+                    if (ipc_shared_data.ota.chunk_index >= ipc_shared_data.ota.chunk_count) {
+                        printf("Invalid chunk index %u\n", ipc_shared_data.ota.chunk_index);
                         break;
                     }
 
-                    ipc_shared_data.ota.chunk_size = pkt->chunk_size;
-                    // Copy expected hash
-                    memcpy(_app_vars.expected_hash, pkt->sha, SWRMT_OTA_SHA256_LENGTH);
-                    memcpy((uint8_t *)ipc_shared_data.ota.chunk, pkt->chunk, pkt->chunk_size);
-                    mutex_unlock();
+                    // Only check for matching sha if chunk was not already acked
+                    if (ipc_shared_data.ota.last_chunk_acked != (int32_t)ipc_shared_data.ota.chunk_index) {
+                        printf("Verify SHA for chunk %u: ", ipc_shared_data.ota.chunk_index);
+                        ipc_shared_data.ota.chunk_size = pkt->chunk_size;
+                        mutex_lock();
+                        memcpy((uint8_t *)ipc_shared_data.ota.chunk, pkt->chunk, pkt->chunk_size);
+                        mutex_unlock();
 
-                    // Compute and compare the chunk hash with the received one
-                    crypto_sha256_init();
-                    crypto_sha256_update((const uint8_t *)ipc_shared_data.ota.chunk, ipc_shared_data.ota.chunk_size);
-                    crypto_sha256(_app_vars.computed_hash);
+                        // Copy expected hash
+                        memcpy(_app_vars.expected_hash, pkt->sha, SWRMT_OTA_SHA256_LENGTH);
 
-                    if (memcmp(_app_vars.computed_hash, _app_vars.expected_hash, 8) != 0) {
-                        printf("OTA chunk request received (index: %u) - Hash mismatch\n", ipc_shared_data.ota.chunk_index);
-                        break;
+                        // Compute and compare the chunk hash with the received one
+                        crypto_sha256_init();
+                        mutex_lock();
+                        crypto_sha256_update((const uint8_t *)ipc_shared_data.ota.chunk, ipc_shared_data.ota.chunk_size);
+                        mutex_unlock();
+                        crypto_sha256(_app_vars.computed_hash);
+
+                        if (memcmp(_app_vars.computed_hash, _app_vars.expected_hash, 8) != 0) {
+                            puts("Failed");
+                            break;
+                        }
+                        puts("OK");
                     }
-
-                    printf("Processing OTA chunk request (index: %u, size: %u)\n", ipc_shared_data.ota.chunk_index, ipc_shared_data.ota.chunk_size);
+                    printf("Process OTA chunk request (index: %u, size: %u)\n", ipc_shared_data.ota.chunk_index, ipc_shared_data.ota.chunk_size);
                     NRF_IPC_NS->TASKS_SEND[IPC_CHAN_OTA_CHUNK] = 1;
                 } break;
                 default:
