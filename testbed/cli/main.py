@@ -14,8 +14,8 @@ from rich.pretty import pprint
 from testbed.swarmit import __version__
 from testbed.swarmit.controller import (
     CHUNK_SIZE,
-    OTA_CHUNK_MAX_RETRIES_DEFAULT,
-    OTA_CHUNK_TIMEOUT_DEFAULT,
+    OTA_ACK_TIMEOUT_DEFAULT,
+    OTA_MAX_RETRIES_DEFAULT,
     Controller,
     ControllerSettings,
     ResetLocation,
@@ -226,29 +226,30 @@ def reset(ctx, locations):
 )
 @click.option(
     "-t",
-    "--chunk-timeout",
+    "--ota-timeout",
     type=float,
-    default=OTA_CHUNK_TIMEOUT_DEFAULT,
+    default=OTA_ACK_TIMEOUT_DEFAULT,
     show_default=True,
-    help="Timeout for each chunk transfer in seconds.",
+    help="Timeout in seconds for each OTA ACK message.",
 )
 @click.option(
     "-r",
-    "--chunk-retries",
+    "--ota-max-retries",
     type=int,
-    default=OTA_CHUNK_MAX_RETRIES_DEFAULT,
+    default=OTA_MAX_RETRIES_DEFAULT,
     show_default=True,
-    help="Number of retries for each chunk transfer.",
+    help="Number of retries for each OTA message (start or chunk) transfer.",
 )
 @click.argument("firmware", type=click.File(mode="rb"), required=False)
 @click.pass_context
-def flash(ctx, yes, start, chunk_timeout, chunk_retries, firmware):
+def flash(ctx, yes, start, ota_timeout, ota_max_retries, firmware):
     """Flash a firmware to the robots."""
     console = Console()
     if firmware is None:
         console.print("[bold red]Error:[/] Missing firmware file. Exiting.")
         ctx.exit()
-
+    ctx.obj["settings"].ota_timeout = ota_timeout
+    ctx.obj["settings"].ota_max_retries = ota_max_retries
     fw = bytearray(firmware.read())
     controller = Controller(ctx.obj["settings"])
     if not controller.ready_devices:
@@ -285,9 +286,7 @@ def flash(ctx, yes, start, chunk_timeout, chunk_retries, firmware):
         f"Radio chunks ([bold]{CHUNK_SIZE}B[/bold]): {start_data["ota"].chunks}"
     )
     start_time = time.time()
-    data = controller.transfer(
-        fw, start_data["acked"], timeout=chunk_timeout, retries=chunk_retries
-    )
+    data = controller.transfer(fw, start_data["acked"])
     print(f"Elapsed: [bold cyan]{time.time() - start_time:.3f}s[/bold cyan]")
     print_transfer_status(data, start_data["ota"])
     if controller.settings.verbose:
