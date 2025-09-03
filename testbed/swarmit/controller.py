@@ -382,13 +382,20 @@ class Controller:
     def start(self):
         """Start the application."""
         ready_devices = self.ready_devices
-        if not self.settings.devices:
-            self._send_start(addr_to_hex(BROADCAST_ADDRESS))
-        else:
-            for device_addr in self.settings.devices:
-                if device_addr not in ready_devices:
-                    continue
-                self._send_start(device_addr)
+        attempts = 0
+        while attempts < COMMAND_MAX_ATTEMPTS and not all(
+            self.status_data[addr] == StatusType.Running
+            for addr in ready_devices
+        ):
+            if not self.settings.devices:
+                self._send_start(addr_to_hex(BROADCAST_ADDRESS))
+            else:
+                for device_addr in self.settings.devices:
+                    if device_addr not in ready_devices:
+                        continue
+                    self._send_start(device_addr)
+            attempts += 1
+            time.sleep(COMMAND_ATTEMPT_DELAY)
         self._live_status(
             ready_devices, timeout=COMMAND_TIMEOUT, message="to start"
         )
