@@ -35,6 +35,8 @@ from testbed.swarmit.protocol import (
 
 CHUNK_SIZE = 64
 COMMAND_TIMEOUT = 6
+COMMAND_MAX_ATTEMPTS = 5
+COMMAND_ATTEMPT_DELAY = 1
 STATUS_TIMEOUT = 5
 OTA_MAX_RETRIES_DEFAULT = 10
 OTA_ACK_TIMEOUT_DEFAULT = 3
@@ -395,13 +397,26 @@ class Controller:
         """Stop the application."""
         stoppable_devices = self.running_devices + self.resetting_devices
 
-        if not self.settings.devices:
-            self.send_payload(BROADCAST_ADDRESS, PayloadStopRequest())
-        else:
-            for device_addr in self.settings.devices:
-                if device_addr not in stoppable_devices:
-                    continue
-                self.send_payload(int(device_addr, 16), PayloadStopRequest())
+        attempts = 0
+        while attempts < COMMAND_MAX_ATTEMPTS and not all(
+            self.status_data[addr] in [StatusType.STOPPING, StatusType.STOPPED]
+            for addr in stoppable_devices
+        ):
+            if not self.settings.devices:
+                self.send_payload(BROADCAST_ADDRESS, PayloadStopRequest())
+            else:
+                for device_addr in self.settings.devices:
+                    if (
+                        device_addr not in stoppable_devices
+                        or self.status_data[device_addr].status
+                        in [StatusType.STOPPING, StatusType.STOPPED]
+                    ):
+                        continue
+                    self.send_payload(
+                        int(device_addr, 16), PayloadStopRequest()
+                    )
+            attempts += 1
+            time.sleep(COMMAND_ATTEMPT_DELAY)
         self._live_status(
             stoppable_devices, timeout=COMMAND_TIMEOUT, message="to stop"
         )
