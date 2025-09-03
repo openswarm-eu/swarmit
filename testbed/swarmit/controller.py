@@ -567,8 +567,18 @@ class Controller:
         ):
             if send is True:
                 if self.settings.verbose:
+                    missing_acks = [
+                        addr
+                        for addr in devices_to_flash
+                        if addr not in self.transfer_data
+                        or not self.transfer_data[addr]
+                        .chunks[chunk.index]
+                        .acked
+                    ]
                     print(
-                        f"Sending chunk {chunk.index} to {device_addr} (retries: {retries_count})"
+                        f"Transferring chunk {chunk.index}/{len(self.start_ota_data.chunks)} to {device_addr} "
+                        f"- {retries_count} retries "
+                        f"- {len(missing_acks)} missing acks: {', '.join(missing_acks) if missing_acks else 'none'}"
                     )
                 self.send_payload(int(device_addr, 16), payload)
                 if int(device_addr, 16) == BROADCAST_ADDRESS:
