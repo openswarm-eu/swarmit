@@ -406,7 +406,7 @@ class Controller:
 
         attempts = 0
         while attempts < COMMAND_MAX_ATTEMPTS and not all(
-            self.status_data[addr] in [StatusType.STOPPING, StatusType.STOPPED]
+            self.status_data[addr] in [StatusType.Stopping, StatusType.Bootloader]
             for addr in stoppable_devices
         ):
             if not self.settings.devices:
@@ -416,7 +416,7 @@ class Controller:
                     if (
                         device_addr not in stoppable_devices
                         or self.status_data[device_addr].status
-                        in [StatusType.STOPPING, StatusType.STOPPED]
+                        in [StatusType.Stopping, StatusType.Bootloader]
                     ):
                         continue
                     self.send_payload(

@@ -27,7 +27,7 @@
 
 // Important: select a Network ID according to the specific deployment you are making,
 // see the registry at https://crystalfree.atlassian.net/wiki/spaces/Mari/pages/3324903426/Registry+of+Mari+Network+IDs
-#define SWARMIT_MARI_NET_ID                 (0x1200)
+#define SWARMIT_MARI_NET_ID                 (0x12AA)
 
 //=========================== variables =========================================
 
