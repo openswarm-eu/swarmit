@@ -35,6 +35,8 @@ from testbed.swarmit.protocol import (
 
 CHUNK_SIZE = 64
 COMMAND_TIMEOUT = 6
+COMMAND_MAX_ATTEMPTS = 5
+COMMAND_ATTEMPT_DELAY = 1
 STATUS_TIMEOUT = 5
 OTA_MAX_RETRIES_DEFAULT = 10
 OTA_ACK_TIMEOUT_DEFAULT = 3
@@ -380,13 +382,20 @@ class Controller:
     def start(self):
         """Start the application."""
         ready_devices = self.ready_devices
-        if not self.settings.devices:
-            self._send_start(addr_to_hex(BROADCAST_ADDRESS))
-        else:
-            for device_addr in self.settings.devices:
-                if device_addr not in ready_devices:
-                    continue
-                self._send_start(device_addr)
+        attempts = 0
+        while attempts < COMMAND_MAX_ATTEMPTS and not all(
+            self.status_data[addr] == StatusType.Running
+            for addr in ready_devices
+        ):
+            if not self.settings.devices:
+                self._send_start(addr_to_hex(BROADCAST_ADDRESS))
+            else:
+                for device_addr in self.settings.devices:
+                    if device_addr not in ready_devices:
+                        continue
+                    self._send_start(device_addr)
+            attempts += 1
+            time.sleep(COMMAND_ATTEMPT_DELAY)
         self._live_status(
             ready_devices, timeout=COMMAND_TIMEOUT, message="to start"
         )
@@ -395,13 +404,26 @@ class Controller:
         """Stop the application."""
         stoppable_devices = self.running_devices + self.resetting_devices
 
-        if not self.settings.devices:
-            self.send_payload(BROADCAST_ADDRESS, PayloadStopRequest())
-        else:
-            for device_addr in self.settings.devices:
-                if device_addr not in stoppable_devices:
-                    continue
-                self.send_payload(int(device_addr, 16), PayloadStopRequest())
+        attempts = 0
+        while attempts < COMMAND_MAX_ATTEMPTS and not all(
+            self.status_data[addr] in [StatusType.STOPPING, StatusType.STOPPED]
+            for addr in stoppable_devices
+        ):
+            if not self.settings.devices:
+                self.send_payload(BROADCAST_ADDRESS, PayloadStopRequest())
+            else:
+                for device_addr in self.settings.devices:
+                    if (
+                        device_addr not in stoppable_devices
+                        or self.status_data[device_addr].status
+                        in [StatusType.STOPPING, StatusType.STOPPED]
+                    ):
+                        continue
+                    self.send_payload(
+                        int(device_addr, 16), PayloadStopRequest()
+                    )
+            attempts += 1
+            time.sleep(COMMAND_ATTEMPT_DELAY)
         self._live_status(
             stoppable_devices, timeout=COMMAND_TIMEOUT, message="to stop"
         )
@@ -567,8 +589,18 @@ class Controller:
         ):
             if send is True:
                 if self.settings.verbose:
+                    missing_acks = [
+                        addr
+                        for addr in devices_to_flash
+                        if addr not in self.transfer_data
+                        or not self.transfer_data[addr]
+                        .chunks[chunk.index]
+                        .acked
+                    ]
                     print(
-                        f"Sending chunk {chunk.index} to {device_addr} (retries: {retries_count})"
+                        f"Transferring chunk {chunk.index}/{len(self.start_ota_data.chunks)} to {device_addr} "
+                        f"- {retries_count} retries "
+                        f"- {len(missing_acks)} missing acks: {', '.join(missing_acks) if missing_acks else 'none'}"
                     )
                 self.send_payload(int(device_addr, 16), payload)
                 if int(device_addr, 16) == BROADCAST_ADDRESS:
