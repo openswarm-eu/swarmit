@@ -406,7 +406,8 @@ class Controller:
 
         attempts = 0
         while attempts < COMMAND_MAX_ATTEMPTS and not all(
-            self.status_data[addr] in [StatusType.Stopping, StatusType.Bootloader]
+            self.status_data[addr]
+            in [StatusType.Stopping, StatusType.Bootloader]
             for addr in stoppable_devices
         ):
             if not self.settings.devices:
