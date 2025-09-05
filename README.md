@@ -50,7 +50,7 @@ The communication between the computer and the swarm devices is performed via a
 gateway board connected via USB to the computer.
 
 This gateway uses the [mari](https://github.com/dotbots/mari) network stack and
-the it must run the Mari gateway firmware, either Edge or Cloud version.
+must run the Mari gateway firmware.
 
 The documentation to setup a Mari gateway is located
 [here](https://github.com/DotBots/mari/wiki/Getting-started#running-mari-network-on-your-computer).
