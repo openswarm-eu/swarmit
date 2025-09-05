@@ -28,11 +28,11 @@ authors = [
 dependencies = [
     "click          == 8.1.7",
     "cryptography   == 43.0.1",
-    "pydotbot@git+https://github.com/DotBots/pydotbot@0.24.0",
+    "pydotbot       >= 0.24.1",
     "rich           == 14.0.0",
     "structlog      == 24.4.0",
     "tqdm           == 4.66.5",
-    "marilib@git+https://github.com/DotBots/marilib@v0.6.0",
+    "marilib@       >= 0.6.0",
 ]
 description = "Run Your Own Robot Swarm Testbed."
 readme = "README.md"
