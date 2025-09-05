@@ -411,37 +411,6 @@ int main(void) {
 
     mari_init();
 
-    // Check reset reason and switch to user image if reset was not triggered by any wdt timeout
-    uint32_t resetreas = NRF_RESET_S->RESETREAS;
-    NRF_RESET_S->RESETREAS = NRF_RESET_S->RESETREAS;
-    if (!(
-        (resetreas & RESET_RESETREAS_DOG0_Detected << RESET_RESETREAS_DOG0_Pos) ||
-        (resetreas & RESET_RESETREAS_DOG1_Detected << RESET_RESETREAS_DOG1_Pos)
-    )) {
-    //if (0) {
-        // Experiment is running
-        ipc_shared_data.status = SWRMT_APPLICATION_RUNNING;
-
-        // Initialize watchdog and non secure access
-        setup_ns_user();
-        setup_watchdog0();
-        NVIC_SetTargetState(IPC_IRQn);
-
-        // Set the vector table address prior to jumping to image
-        SCB_NS->VTOR = (uint32_t)table;
-        __TZ_set_MSP_NS(table->msp);
-        __TZ_set_CONTROL_NS(0);
-
-        // Flush and refill pipeline
-        __ISB();
-
-        // Jump to non secure image
-        reset_handler_t reset_handler_ns = (reset_handler_t)(cmse_nsfptr_create(table->reset_handler));
-        reset_handler_ns();
-
-        while (1) {}
-    }
-
     _bootloader_vars.base_addr = SWARMIT_BASE_ADDRESS;
     _bootloader_vars.ota_require_erase = true;
 
@@ -458,7 +427,6 @@ int main(void) {
 
     // Status LED
     db_gpio_init(&_status_led, DB_GPIO_OUT);
-
     // Periodic Timer and Lighthouse initialization
     db_timer_init(1);
     db_timer_set_periodic_ms(1, 1, LH2_UPDATE_DELAY_MS, &_update_lh2);
@@ -521,7 +489,28 @@ int main(void) {
         }
 
         if (_bootloader_vars.start_application) {
-            NVIC_SystemReset();
+            db_timer_stop(1);
+            db_lh2_stop();
+            ipc_shared_data.status = SWRMT_APPLICATION_RUNNING;
+
+            // Initialize watchdog and non secure access
+            setup_ns_user();
+            setup_watchdog0();
+            NVIC_SetTargetState(IPC_IRQn);
+
+            // Set the vector table address prior to jumping to image
+            SCB_NS->VTOR = (uint32_t)table;
+            __TZ_set_MSP_NS(table->msp);
+            __TZ_set_CONTROL_NS(0);
+
+            // Flush and refill pipeline
+            __ISB();
+
+            // Jump to non secure image
+            reset_handler_t reset_handler_ns = (reset_handler_t)(cmse_nsfptr_create(table->reset_handler));
+            reset_handler_ns();
+
+            while (1) {}
         }
 
 #if defined(USE_LH2)
