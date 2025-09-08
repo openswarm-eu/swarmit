@@ -26,12 +26,12 @@ authors = [
     { name="Alexandre Abadie", email="alexandre.abadie@inria.fr" },
 ]
 dependencies = [
-    "click          == 8.1.7",
-    "cryptography   == 43.0.1",
+    "click          >= 8.1.7",
+    "cryptography   >= 45.0.7",
     "pydotbot       >= 0.24.1",
-    "rich           == 14.0.0",
-    "structlog      == 24.4.0",
-    "tqdm           == 4.66.5",
+    "rich           >= 14.0.0",
+    "structlog      >= 24.4.0",
+    "tqdm           >= 4.66.5",
     "marilib-pkg    >= 0.6.0",
 ]
 description = "Run Your Own Robot Swarm Testbed."
