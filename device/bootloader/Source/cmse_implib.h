@@ -24,7 +24,7 @@ typedef struct {
     int y;
 } swarmit_lh2_position_t;
 
-__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_reload_wdt0(void);
+__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_keep_alive(void);
 __attribute__((cmse_nonsecure_entry, aligned)) void swarmit_send_data_packet(const uint8_t *packet, uint8_t length);
 __attribute__((cmse_nonsecure_entry, aligned)) void swarmit_send_raw_data(const uint8_t *packet, uint8_t length);
 __attribute__((cmse_nonsecure_entry, aligned)) void swarmit_ipc_isr(ipc_isr_cb_t cb);
@@ -40,5 +40,8 @@ __attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_stop(void);
 __attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_process_location(db_lh2_t *lh2);
 __attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_position(swarmit_lh2_position_t *position);
 __attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_spim_isr(void);
+
+// SAADC functions
+__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_saadc_read(uint8_t channel, uint16_t *value);
 
 #endif // __CMSE_IMPLIB_H

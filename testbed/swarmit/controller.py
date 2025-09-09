@@ -22,6 +22,7 @@ from testbed.swarmit.adapter import (
     MarilibEdgeAdapter,
 )
 from testbed.swarmit.protocol import (
+    DeviceType,
     PayloadMessage,
     PayloadOTAChunkRequest,
     PayloadOTAStartRequest,
@@ -39,9 +40,20 @@ COMMAND_MAX_ATTEMPTS = 5
 COMMAND_ATTEMPT_DELAY = 1
 STATUS_TIMEOUT = 5
 OTA_MAX_RETRIES_DEFAULT = 10
-OTA_ACK_TIMEOUT_DEFAULT = 3
+OTA_ACK_TIMEOUT_DEFAULT = 2
 SERIAL_PORT_DEFAULT = get_default_port()
 BROADCAST_ADDRESS = 0xFFFFFFFFFFFFFFFF
+
+
+@dataclass
+class NodeStatus:
+    """Class that holds node status."""
+
+    device: DeviceType = DeviceType.Unknown
+    status: StatusType = StatusType.Bootloader
+    battery: int = 0
+    pos_x: int = 0
+    pos_y: int = 0
 
 
 @dataclass
@@ -101,11 +113,20 @@ def addr_to_hex(addr: int) -> str:
     return hexlify(addr.to_bytes(8, "big")).decode().upper()
 
 
+def battery_level_color(level: int):
+    if level > 85:
+        return "green"
+    elif level > 65:
+        return "orange"
+    else:
+        return "red"
+
+
 def generate_status(status_data, devices=[], status_message="found"):
     data = {
-        key: device
-        for key, device in status_data.items()
-        if (devices and key in devices) or (not devices)
+        addr: device_data
+        for addr, device_data in status_data.items()
+        if (devices and addr in devices) or (not devices)
     }
     if not data:
         return Group(Text(f"\nNo device {status_message}\n"))
@@ -117,15 +138,28 @@ def generate_status(status_data, devices=[], status_message="found"):
     table = Table()
     table.add_column("Device Addr", style="magenta", no_wrap=True)
     table.add_column(
+        "Type",
+        style="cyan",
+        justify="center",
+    )
+    table.add_column(
+        "Battery",
+        style="cyan",
+        justify="right",
+    )
+    table.add_column(
         "Status",
         style="green",
         justify="center",
         width=max([len(m) for m in StatusType.__members__]),
     )
-    for device_addr, status in sorted(data.items()):
+    for device_addr, device_data in sorted(data.items()):
+
         table.add_row(
             f"{device_addr}",
-            f"{'[bold cyan]' if status == StatusType.Running else '[bold green]'}{status.name}",
+            f"{device_data.device.name}",
+            f"[{battery_level_color(device_data.battery)}]{device_data.battery:>3}%",
+            f"{'[bold cyan]' if device_data.status == StatusType.Running else '[bold green]'}{device_data.status.name}",
         )
     return Group(header, table)
 
@@ -188,7 +222,7 @@ class Controller:
         self.logger = LOGGER.bind(context=__name__)
         self.settings = settings
         self._interface: GatewayAdapterBase = None
-        self.status_data: dict[str, StatusType] = {}
+        self.status_data: dict[str, NodeStatus] = {}
         self.started_data: list[str] = []
         self.stopped_data: list[str] = []
         self.chunks: list[DataChunk] = []
@@ -225,11 +259,11 @@ class Controller:
         """Return the running devices."""
         return [
             addr
-            for addr, status in self.known_devices.items()
+            for addr, node in self.known_devices.items()
             if (
                 (
-                    status == StatusType.Running
-                    or status == StatusType.Programming
+                    node.status == StatusType.Running
+                    or node.status == StatusType.Programming
                 )
                 and (
                     not self.settings.devices or addr in self.settings.devices
@@ -242,9 +276,9 @@ class Controller:
         """Return the resetting devices."""
         return [
             device_addr
-            for device_addr, status in self.known_devices.items()
+            for device_addr, node in self.known_devices.items()
             if (
-                status == StatusType.Resetting
+                node.status == StatusType.Resetting
                 and (
                     not self.settings.devices
                     or device_addr in self.settings.devices
@@ -257,9 +291,9 @@ class Controller:
         """Return the ready devices."""
         return [
             device_addr
-            for device_addr, status in self.known_devices.items()
+            for device_addr, node in self.known_devices.items()
             if (
-                status == StatusType.Bootloader
+                node.status == StatusType.Bootloader
                 and (
                     not self.settings.devices
                     or device_addr in self.settings.devices
@@ -292,9 +326,14 @@ class Controller:
             packet.payload_type
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_STATUS
         ):
-            self.status_data.update(
-                {device_addr: StatusType(packet.payload.status)}
+            status = NodeStatus(
+                device=DeviceType(packet.payload.device),
+                status=StatusType(packet.payload.status),
+                battery=packet.payload.battery,
+                pos_x=packet.payload.pos_x,
+                pos_y=packet.payload.pos_y,
             )
+            self.status_data.update({device_addr: status})
         elif (
             packet.payload_type
             == SwarmitPayloadType.SWARMIT_NOTIFICATION_OTA_START_ACK
@@ -384,7 +423,7 @@ class Controller:
         ready_devices = self.ready_devices
         attempts = 0
         while attempts < COMMAND_MAX_ATTEMPTS and not all(
-            self.status_data[addr] == StatusType.Running
+            self.status_data[addr].status == StatusType.Running
             for addr in ready_devices
         ):
             if not self.settings.devices:
@@ -406,7 +445,7 @@ class Controller:
 
         attempts = 0
         while attempts < COMMAND_MAX_ATTEMPTS and not all(
-            self.status_data[addr]
+            self.status_data[addr].status
             in [StatusType.Stopping, StatusType.Bootloader]
             for addr in stoppable_devices
         ):

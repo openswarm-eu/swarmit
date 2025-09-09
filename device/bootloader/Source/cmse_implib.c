@@ -5,6 +5,7 @@
 
 #include <nrf.h>
 
+#include "battery.h"
 #include "cmse_implib.h"
 #include "board_config.h"
 #include "device.h"
@@ -12,13 +13,15 @@
 #include "mari.h"
 #include "rng.h"
 #include "lh2.h"
+#include "saadc.h"
 
 static __attribute__((aligned(8))) uint8_t _tx_data_buffer[UINT8_MAX];
 
 extern volatile __attribute__((section(".shared_data"))) ipc_shared_data_t ipc_shared_data;
 
-__attribute__((cmse_nonsecure_entry)) void swarmit_reload_wdt0(void) {
+__attribute__((cmse_nonsecure_entry)) void swarmit_keep_alive(void) {
     NRF_WDT0_S->RR[0] = WDT_RR_RR_Reload << WDT_RR_RR_Pos;
+    ipc_shared_data.battery_level = battery_level_read();
 }
 
 __attribute__((cmse_nonsecure_entry)) void swarmit_send_data_packet(const uint8_t *packet, uint8_t length) {
@@ -97,4 +100,11 @@ __attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_spim_isr(void) {
         NRF_SPIM4_S->EVENTS_END = 0;
         db_lh2_handle_isr();
     }
+}
+
+__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_saadc_read(uint8_t channel, uint16_t *value) {
+    if (channel != DB_SAADC_INPUT_VDDH && !(channel <= DB_SAADC_INPUT_VDD) && !(channel >= DB_SAADC_INPUT_AIN0)) {
+        return;
+    }
+    return db_saadc_read(channel, value);
 }
