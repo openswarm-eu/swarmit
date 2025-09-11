@@ -17,6 +17,15 @@ class StatusType(Enum):
     Programming = 4
 
 
+class DeviceType(Enum):
+    """Types of devices."""
+
+    Unknown = 0
+    DotBotV3 = 1
+    DotBotV2 = 2
+    nRF5340DK = 3
+
+
 class SwarmitPayloadType(IntEnum):
     """Types of DotBot payload types."""
 
@@ -126,11 +135,23 @@ class PayloadStatusNotification(Payload):
 
     metadata: list[PayloadFieldMetadata] = dataclasses.field(
         default_factory=lambda: [
+            PayloadFieldMetadata(name="device", disp="dev."),
             PayloadFieldMetadata(name="status", disp="st."),
+            PayloadFieldMetadata(name="battery", disp="bat."),
+            PayloadFieldMetadata(
+                name="pos_x", disp="pos x", length=4, signed=True
+            ),
+            PayloadFieldMetadata(
+                name="pos_y", disp="pos y", length=4, signed=True
+            ),
         ]
     )
 
+    device: DeviceType = DeviceType.Unknown
     status: StatusType = StatusType.Bootloader
+    battery: int = 0
+    pos_x: int = 0
+    pos_y: int = 0
 
 
 @dataclass

@@ -68,6 +68,13 @@ typedef enum {
     LH2_mini_mote = 4,  ///< LH2 mini mote application
 } application_type_t;
 
+typedef enum {
+    SWRMT_DEVICE_TYPE_UNKNOWN = 0,
+    SWRMT_DEVICE_TYPE_DOTBOTV3 = 1,
+    SWRMT_DEVICE_TYPE_DOTBOTV2 = 2,
+    SWRMT_DEVICE_TYPE_NRF5340DK = 3,
+} swrmt_device_type_t;
+
 /// Protocol packet type
 typedef enum {
     PACKET_BEACON = 1,
@@ -116,13 +123,13 @@ typedef struct __attribute__((packed)) {
 } protocol_lh2_location_t;
 
 /**
- * @brief   Write an application advertizement packet in a buffer
+ * @brief   Write an application advertisement packet in a buffer
  *
  * @param[out]  buffer      Bytes array to write to
- * @param[in]   application Type of application advertized
+ * @param[in]   application Type of application advertised
  *
  * @return                  Number of bytes written in the buffer
  */
-size_t db_protocol_advertizement_to_buffer(uint8_t *buffer, application_type_t application);
+size_t db_protocol_advertisement_to_buffer(uint8_t *buffer, application_type_t application);
 
 #endif

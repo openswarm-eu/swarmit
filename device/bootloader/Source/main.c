@@ -15,6 +15,7 @@
 #include <arm_cmse.h>
 #include <nrf.h>
 
+#include "battery.h"
 #include "ipc.h"
 #include "nvmc.h"
 #include "protocol.h"
@@ -31,7 +32,7 @@
 
 #define SWARMIT_BASE_ADDRESS        (0x10000)
 
-#define ADVERTIZE_DELAY             (1000U)
+#define ADVERTISE_DELAY             (1000U)
 #define LH2_UPDATE_DELAY_MS         (250U) ///< 100ms delay between each LH2 data refresh
 
 #define ROBOT_DISTANCE_THRESHOLD    (0.05)
@@ -172,8 +173,6 @@ static void setup_ns_user(void) {
     tz_configure_periph_dma_non_secure(NRF_APPLICATION_PERIPH_ID_QSPI);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_RTC0);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_RTC1);
-    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_SAADC);
-    tz_configure_periph_dma_non_secure(NRF_APPLICATION_PERIPH_ID_SAADC);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_SPIM0_SPIS0_TWIM0_TWIS0_UARTE0);
     tz_configure_periph_dma_non_secure(NRF_APPLICATION_PERIPH_ID_SPIM0_SPIS0_TWIM0_TWIS0_UARTE0);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_SPIM1_SPIS1_TWIM1_TWIS1_UARTE1);
@@ -209,7 +208,6 @@ static void setup_ns_user(void) {
     NVIC_SetTargetState(QSPI_IRQn);
     NVIC_SetTargetState(RTC0_IRQn);
     NVIC_SetTargetState(RTC1_IRQn);
-    NVIC_SetTargetState(SAADC_IRQn);
     NVIC_SetTargetState(SPIM0_SPIS0_TWIM0_TWIS0_UARTE0_IRQn);
     NVIC_SetTargetState(SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQn);
     NVIC_SetTargetState(SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQn);
@@ -236,7 +234,8 @@ static void _update_lh2(void) {
     _bootloader_vars.lh2_update = true;
 }
 
-static void _advertise(void) {
+static void _advertise_and_read_battery(void) {
+    ipc_shared_data.battery_level = battery_level_read();
     _bootloader_vars.advertise = true;
 }
 
@@ -406,10 +405,24 @@ int main(void) {
     NRF_DPPIC_NS->CHENSET = (DPPIC_CHENSET_CH0_Enabled << DPPIC_CHENSET_CH0_Pos);
     NRF_DPPIC_S->CHENSET = (DPPIC_CHENSET_CH0_Enabled << DPPIC_CHENSET_CH0_Pos);
 
+    // Write device type value to shared memory
+#if defined(BOARD_DOTBOT_V3)
+    ipc_shared_data.device_type = SWRMT_DEVICE_TYPE_DOTBOTV3;
+#elif defined(BOARD_DOTBOT_V2)
+    ipc_shared_data.device_type = SWRMT_DEVICE_TYPE_DOTBOTV2;
+#elif defined(BOARD_NRF5340DK)
+    ipc_shared_data.device_type = SWRMT_DEVICE_TYPE_NRF5340DK;
+#else
+    ipc_shared_data.device_type = SWRMT_DEVICE_TYPE_UNKNOWN;
+#endif
+
     // Start the network core
     release_network_core();
 
     mari_init();
+
+    battery_level_init();
+    ipc_shared_data.battery_level = battery_level_read();
 
     // Check reset reason and switch to user image if reset was not triggered by any wdt timeout
     uint32_t resetreas = NRF_RESET_S->RESETREAS;
@@ -459,7 +472,7 @@ int main(void) {
     // Periodic Timer and Lighthouse initialization
     db_timer_init(1);
     db_timer_set_periodic_ms(1, 1, LH2_UPDATE_DELAY_MS, &_update_lh2);
-    db_timer_set_periodic_ms(1, 2, ADVERTIZE_DELAY, &_advertise);
+    db_timer_set_periodic_ms(1, 2, ADVERTISE_DELAY, &_advertise_and_read_battery);
     db_lh2_init(&_bootloader_vars.lh2, &db_lh2_d, &db_lh2_e);
     db_lh2_start();
 #endif
@@ -524,7 +537,7 @@ int main(void) {
 #if defined(USE_LH2)
         if (_bootloader_vars.advertise && ipc_shared_data.status != SWRMT_APPLICATION_PROGRAMMING) {
             db_gpio_toggle(&_status_led);
-            size_t length = db_protocol_advertizement_to_buffer(_bootloader_vars.notification_buffer, DotBot);
+            size_t length = db_protocol_advertisement_to_buffer(_bootloader_vars.notification_buffer, DotBot);
             mari_node_tx(_bootloader_vars.notification_buffer, length);
             _bootloader_vars.advertise = false;
         }

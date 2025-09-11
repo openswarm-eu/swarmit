@@ -3,7 +3,7 @@
   <project Name="bootloader">
     <configuration
       Name="Common"
-      project_dependencies="00bsp_dotbot_lh2(bsp);00drv_move(drv);00bsp_timer_hf(bsp);00bsp_pwm(bsp);00bsp_gpio(bsp)"
+      project_dependencies="00bsp_dotbot_lh2(bsp);00drv_move(drv);00bsp_timer_hf(bsp);00bsp_pwm(bsp);00bsp_gpio(bsp);00bsp_saadc(bsp)"
       project_directory=""
       project_type="Executable" />
     <configuration Name="Release" gcc_optimization_level="Level 0" />
@@ -12,20 +12,22 @@
       <file file_name="Setup/MemoryMap.xml" />
     </folder>
     <folder Name="Source">
+      <file file_name="Source/battery.c" />
+      <file file_name="Source/battery.h" />
       <file file_name="Source/cmse_implib.c" />
       <file file_name="Source/cmse_implib.h" />
       <file file_name="Source/device.h" />
       <file file_name="Source/ipc.c" />
       <file file_name="Source/ipc.h" />
       <file file_name="Source/main.c" />
+      <file file_name="Source/mari.c" />
+      <file file_name="Source/mari.h" />
       <file file_name="Source/nvmc.c" />
       <file file_name="Source/nvmc.h" />
       <file file_name="Source/protocol.c" />
       <file file_name="Source/protocol.h" />
       <file file_name="Source/rng.c" />
       <file file_name="Source/rng.h" />
-      <file file_name="Source/mari.c" />
-      <file file_name="Source/mari.h" />
       <file file_name="Source/tz.c" />
       <file file_name="Source/tz.h" />
     </folder>

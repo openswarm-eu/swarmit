@@ -23,7 +23,7 @@ typedef struct __attribute__((packed)) {
     uint8_t content[UINT8_MAX];
 } msg_packet_t;
 
-void swarmit_reload_wdt0(void);
+void swarmit_keep_alive(void);
 void swarmit_send_data_packet(const uint8_t *packet, uint8_t length);
 void swarmit_ipc_isr(ipc_isr_cb_t cb);
 void swarmit_log_data(uint8_t *data, size_t length);
@@ -58,7 +58,7 @@ int main(void) {
 
     while (1) {
         delay_ms(500);
-        swarmit_reload_wdt0();
+        swarmit_keep_alive();
         swarmit_send_data_packet((uint8_t *)"Hello", 5);
         swarmit_log_data((uint8_t *)"Logging", 7);
         // Crash on purpose
