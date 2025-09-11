@@ -16,6 +16,7 @@
 #include <nrf.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include "localization.h"
 #include "protocol.h"
 
 #define IPC_IRQ_PRIORITY (1)
@@ -37,7 +38,6 @@ typedef enum {
     IPC_CHAN_LOG_EVENT          = 5,    ///< Channel used for logging events
     IPC_CHAN_OTA_START          = 6,    ///< Channel used for starting an OTA process
     IPC_CHAN_OTA_CHUNK          = 7,    ///< Channel used for writing a non secure image chunk
-    IPC_CHAN_LH2_LOCATION       = 8,    ///< Channel used to notify of a new location received
 } ipc_channels_t;
 
 typedef struct __attribute__((packed)) {
@@ -73,8 +73,8 @@ typedef struct __attribute__((packed)) {
     ipc_log_data_t          log;                ///< Log data
     ipc_rng_data_t          rng;                ///< Rng shared data
     ipc_ota_data_t          ota;                ///< OTA data
-    protocol_lh2_location_t current_location;   ///< LH2 current location
-    protocol_lh2_location_t target_location;    ///< LH2 target location
+    position_2d_t           target_position;    ///< Target 2D position
+    position_2d_t           current_position;   ///< Current 2D position
     ipc_radio_pdu_t         tx_pdu;             ///< TX PDU
     ipc_radio_pdu_t         rx_pdu;             ///< RX PDU
 } ipc_shared_data_t;

@@ -35,9 +35,6 @@ typedef struct {
     bool        req_received;
     bool        data_received;
     bool        send_status;
-#if defined(USE_LH2)
-    bool        lh2_location_received;
-#endif
     uint8_t     req_buffer[255];
     uint8_t     notification_buffer[255];
     ipc_req_t   ipc_req;
@@ -64,15 +61,6 @@ static void _handle_packet(uint8_t *packet, uint8_t length) {
         _app_vars.req_received = true;
         return;
     }
-
-#if defined(USE_LH2)
-    // Handle LH2 position packets only if in resetting status
-    if ((packet_type == PROTOCOL_LH2_LOCATION) && (ipc_shared_data.status == SWRMT_APPLICATION_RESETTING)) {
-        memcpy((uint8_t *)&ipc_shared_data.current_location, ptr, sizeof(protocol_lh2_location_t));
-        _app_vars.lh2_location_received = true;
-        return;
-    }
-#endif
 
     // ignore other types of packet if not in running mode
     if (ipc_shared_data.status != SWRMT_APPLICATION_RUNNING) {
@@ -130,7 +118,6 @@ int main(void) {
     //NRF_IPC_NS->SEND_CNF[IPC_CHAN_APPLICATION_RESET] = 1 << IPC_CHAN_APPLICATION_RESET;
     NRF_IPC_NS->SEND_CNF[IPC_CHAN_OTA_START]         = 1 << IPC_CHAN_OTA_START;
     NRF_IPC_NS->SEND_CNF[IPC_CHAN_OTA_CHUNK]         = 1 << IPC_CHAN_OTA_CHUNK;
-    NRF_IPC_NS->SEND_CNF[IPC_CHAN_LH2_LOCATION]      = 1 << IPC_CHAN_LH2_LOCATION;
     NRF_IPC_NS->RECEIVE_CNF[IPC_CHAN_REQ]            = 1 << IPC_CHAN_REQ;
     NRF_IPC_NS->RECEIVE_CNF[IPC_CHAN_LOG_EVENT]      = 1 << IPC_CHAN_LOG_EVENT;
 
@@ -155,10 +142,8 @@ int main(void) {
             _app_vars.notification_buffer[length++] = ipc_shared_data.device_type;
             _app_vars.notification_buffer[length++] = ipc_shared_data.status;
             _app_vars.notification_buffer[length++] = ipc_shared_data.battery_level;
-            _app_vars.notification_buffer[length]   = (int32_t)0; // PosX
-            length += sizeof(int32_t);
-            _app_vars.notification_buffer[length]   = (int32_t)0; // PosY
-            length += sizeof(int32_t);
+            memcpy(&_app_vars.notification_buffer[length], (void *)&ipc_shared_data.current_position, sizeof(position_2d_t));
+            length += sizeof(position_2d_t);
             mari_node_tx_payload(_app_vars.notification_buffer, length);
         }
 
@@ -185,9 +170,7 @@ int main(void) {
                     if (ipc_shared_data.status != SWRMT_APPLICATION_READY) {
                         break;
                     }
-#if defined(USE_LH2)
-                    memcpy((uint8_t *)&ipc_shared_data.target_location, req->data, sizeof(protocol_lh2_location_t));
-#endif
+                    memcpy((uint8_t *)&ipc_shared_data.target_position, req->data, sizeof(position_2d_t));
                     puts("Reset request received");
                     ipc_shared_data.status = SWRMT_APPLICATION_RESETTING;
                     //NRF_IPC_NS->TASKS_SEND[IPC_CHAN_APPLICATION_RESET] = 1;
@@ -254,12 +237,6 @@ int main(void) {
                     break;
             }
         }
-
-#if defined(USE_LH2)
-        if (_app_vars.lh2_location_received) {
-            NRF_IPC_NS->TASKS_SEND[IPC_CHAN_LH2_LOCATION] = 1;
-        }
-#endif
 
         if (_app_vars.ipc_req != IPC_REQ_NONE) {
             ipc_shared_data.net_ack = false;

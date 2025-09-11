@@ -19,6 +19,8 @@
       <file file_name="Source/device.h" />
       <file file_name="Source/ipc.c" />
       <file file_name="Source/ipc.h" />
+      <file file_name="Source/localization.c" />
+      <file file_name="Source/localization.h" />
       <file file_name="Source/main.c" />
       <file file_name="Source/mari.c" />
       <file file_name="Source/mari.h" />

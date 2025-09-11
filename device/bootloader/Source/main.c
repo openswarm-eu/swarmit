@@ -25,15 +25,15 @@
 // DotBot-firmware includes
 #include "board_config.h"
 #include "gpio.h"
-#include "lh2.h"
+#include "localization.h"
 #include "motors.h"
 #include "move.h"
 #include "timer.h"
 
 #define SWARMIT_BASE_ADDRESS        (0x10000)
 
-#define ADVERTISE_DELAY             (1000U)
-#define LH2_UPDATE_DELAY_MS         (250U) ///< 100ms delay between each LH2 data refresh
+#define BATTERY_UPDATE_DELAY        (1000U)
+#define POSITION_UPDATE_DELAY_MS    (100U) ///< 100ms delay between each position update
 
 #define ROBOT_DISTANCE_THRESHOLD    (0.05)
 #define ROBOT_DIRECTION_THRESHOLD   (0.01)
@@ -48,32 +48,27 @@
 extern volatile __attribute__((section(".shared_data"))) ipc_shared_data_t ipc_shared_data;
 
 typedef struct {
-    uint8_t     notification_buffer[255]  __attribute__((aligned));
-    uint32_t    base_addr;
-    bool        ota_start_request;
-    bool        ota_require_erase;
-    bool        ota_chunk_request;
-    bool        start_application;
-#if defined(USE_LH2)
-    db_lh2_t    lh2;
-    bool        lh2_location;
-    bool        lh2_update;
-    bool        advertise;
-#endif
+    uint8_t         notification_buffer[255]  __attribute__((aligned));
+    uint32_t        base_addr;
+    bool            ota_start_request;
+    bool            ota_require_erase;
+    bool            ota_chunk_request;
+    bool            start_application;
+    position_2d_t   last_position;
+    bool            position_update;
+    bool            battery_update;
 } bootloader_app_data_t;
 
-#if defined(USE_LH2)
 typedef struct {
-    protocol_lh2_location_t lh2_previous_location;
-    int16_t direction;
-    bool initial_direction_compensated;
-    bool final_direction_compensated;
-    bool target_reached;
+    position_2d_t   previous_position;
+    int16_t         direction;
+    bool            initial_direction_compensated;
+    bool            final_direction_compensated;
+    bool            target_reached;
 } control_loop_data_t;
 
 static control_loop_data_t _control_loop_vars = { 0 };
 static const gpio_t _status_led = { .port = 1, .pin = 5 };  // TODO: use board specific values
-#endif
 
 static bootloader_app_data_t _bootloader_vars = { 0 };
 
@@ -229,42 +224,15 @@ static void setup_ns_user(void) {
     __ISB(); // Flush and refill pipeline with updated permissions
 }
 
-#if defined(USE_LH2)
-static void _update_lh2(void) {
-    _bootloader_vars.lh2_update = true;
+static void _update_position(void) {
+    _bootloader_vars.position_update = true;
 }
 
-static void _advertise_and_read_battery(void) {
-    ipc_shared_data.battery_level = battery_level_read();
-    _bootloader_vars.advertise = true;
+static void _read_battery(void) {
+    _bootloader_vars.battery_update = true;
 }
 
-static void _process_lh2(void) {
-    if (_bootloader_vars.lh2.data_ready[0][0] == DB_LH2_PROCESSED_DATA_AVAILABLE && _bootloader_vars.lh2.data_ready[1][0] == DB_LH2_PROCESSED_DATA_AVAILABLE) {
-        db_lh2_stop();
-        // Prepare the radio buffer
-        size_t length = 0;
-        _bootloader_vars.notification_buffer[length++] = PROTOCOL_DOTBOT_DATA;
-        memcpy(_bootloader_vars.notification_buffer + length, &_control_loop_vars.direction, sizeof(int16_t));
-        length += sizeof(int16_t);
-        _bootloader_vars.notification_buffer[length++] = LH2_SWEEP_COUNT;
-        // Add the LH2 sweep
-        for (uint8_t lh2_sweep_index = 0; lh2_sweep_index < LH2_SWEEP_COUNT; lh2_sweep_index++) {
-            memcpy(_bootloader_vars.notification_buffer + length, &_bootloader_vars.lh2.raw_data[lh2_sweep_index][0], sizeof(db_lh2_raw_data_t));
-            length += sizeof(db_lh2_raw_data_t);
-
-            // Mark the data as already sent
-            _bootloader_vars.lh2.data_ready[lh2_sweep_index][0] = DB_LH2_NO_NEW_DATA;
-        }
-
-        // Send the radio packet
-        mari_node_tx(_bootloader_vars.notification_buffer, length);
-
-        db_lh2_start();
-    }
-}
-
-static void _compute_angle(const protocol_lh2_location_t *head, const protocol_lh2_location_t *tail, int16_t *angle) {
+static void _compute_angle(const position_2d_t *head, const position_2d_t *tail, int16_t *angle) {
     float dx = ((float)head->x / 1e6) - ((float)tail->x / 1e6);
     float dy = ((float)head->y / 1e6) - ((float)tail->y / 1e6);
     float distance = sqrtf(powf(dx, 2) + powf(dy, 2));
@@ -300,7 +268,7 @@ static void _compensate_initial_direction(void) {
 
     // Compute angle to target and rotate
     int16_t angle_to_target = 0;
-    _compute_angle((const protocol_lh2_location_t *)&ipc_shared_data.target_location, (const protocol_lh2_location_t *)&ipc_shared_data.current_location, &angle_to_target);
+    _compute_angle((const position_2d_t *)&ipc_shared_data.target_position, (const position_2d_t *)&_bootloader_vars.last_position, &angle_to_target);
     int16_t error_angle = angle_to_target - _control_loop_vars.direction;
     _compensate_angle(error_angle);
     db_move_straight(ROBOT_STRAIGHT_SPEED, ROBOT_STRAIGHT_SPEED);
@@ -312,8 +280,8 @@ static void _update_control_loop(void) {
         return;
     }
 
-    float dx = ((float)ipc_shared_data.target_location.x / 1e6) - ((float)ipc_shared_data.current_location.x / 1e6);
-    float dy = ((float)ipc_shared_data.target_location.y / 1e6) - ((float)ipc_shared_data.current_location.y / 1e6);
+    float dx = ((float)ipc_shared_data.target_position.x / 1e6) - ((float)_bootloader_vars.last_position.x / 1e6);
+    float dy = ((float)ipc_shared_data.target_position.y / 1e6) - ((float)_bootloader_vars.last_position.y / 1e6);
     float distanceToTarget = sqrtf(powf(dx, 2) + powf(dy, 2));
     float speedReductionFactor = 1.0;  // No reduction by default
 
@@ -334,7 +302,7 @@ static void _update_control_loop(void) {
         right_speed = (int16_t)ROBOT_MAX_SPEED * speedReductionFactor;
     } else {
         // compute angle to target waypoint
-        _compute_angle((const protocol_lh2_location_t *)&ipc_shared_data.target_location, (const protocol_lh2_location_t *)&ipc_shared_data.current_location, &angle_to_target);
+        _compute_angle((const position_2d_t *)&ipc_shared_data.target_position, (const position_2d_t *)&_bootloader_vars.last_position, &angle_to_target);
         error_angle = angle_to_target - _control_loop_vars.direction;
         if (error_angle < -180) {
             error_angle += 360;
@@ -357,7 +325,6 @@ static void _update_control_loop(void) {
 
     db_motors_set_speed(left_speed, right_speed);
 }
-#endif
 
 int main(void) {
 
@@ -379,9 +346,8 @@ int main(void) {
                             1 << IPC_CHAN_RADIO_RX |
                             1 << IPC_CHAN_OTA_START |
                             1 << IPC_CHAN_OTA_CHUNK |
-                            1 << IPC_CHAN_APPLICATION_START |
-                            //1 << IPC_CHAN_APPLICATION_RESET |
-                            1 << IPC_CHAN_LH2_LOCATION
+                            1 << IPC_CHAN_APPLICATION_START
+                            //1 << IPC_CHAN_APPLICATION_RESET
                         );
     NRF_IPC_S->SEND_CNF[IPC_CHAN_REQ]                   = 1 << IPC_CHAN_REQ;
     NRF_IPC_S->SEND_CNF[IPC_CHAN_LOG_EVENT]             = 1 << IPC_CHAN_LOG_EVENT;
@@ -391,7 +357,6 @@ int main(void) {
     //NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_APPLICATION_RESET]  = 1 << IPC_CHAN_APPLICATION_RESET;
     NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_OTA_START]          = 1 << IPC_CHAN_OTA_START;
     NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_OTA_CHUNK]          = 1 << IPC_CHAN_OTA_CHUNK;
-    NRF_IPC_S->RECEIVE_CNF[IPC_CHAN_LH2_LOCATION]       = 1 << IPC_CHAN_LH2_LOCATION;
     NVIC_EnableIRQ(IPC_IRQn);
     NVIC_ClearPendingIRQ(IPC_IRQn);
     NVIC_SetPriority(IPC_IRQn, IPC_IRQ_PRIORITY);
@@ -456,7 +421,6 @@ int main(void) {
     _bootloader_vars.base_addr = SWARMIT_BASE_ADDRESS;
     _bootloader_vars.ota_require_erase = true;
 
-#if defined(USE_LH2)
     // Initialize current angle to invalid value to force a recomputation when reset is called
     _control_loop_vars.direction = -1000;
     _control_loop_vars.target_reached = false;
@@ -471,11 +435,8 @@ int main(void) {
     db_gpio_init(&_status_led, DB_GPIO_OUT);
     // Periodic Timer and Lighthouse initialization
     db_timer_init(1);
-    db_timer_set_periodic_ms(1, 1, LH2_UPDATE_DELAY_MS, &_update_lh2);
-    db_timer_set_periodic_ms(1, 2, ADVERTISE_DELAY, &_advertise_and_read_battery);
-    db_lh2_init(&_bootloader_vars.lh2, &db_lh2_d, &db_lh2_e);
-    db_lh2_start();
-#endif
+    db_timer_set_periodic_ms(1, 1, POSITION_UPDATE_DELAY_MS, &_update_position);
+    db_timer_set_periodic_ms(1, 2, BATTERY_UPDATE_DELAY, &_read_battery);
 
     // Experiment is ready
     ipc_shared_data.status = SWRMT_APPLICATION_READY;
@@ -534,12 +495,10 @@ int main(void) {
             NVIC_SystemReset();
         }
 
-#if defined(USE_LH2)
-        if (_bootloader_vars.advertise && ipc_shared_data.status != SWRMT_APPLICATION_PROGRAMMING) {
+        if (_bootloader_vars.battery_update) {
             db_gpio_toggle(&_status_led);
-            size_t length = db_protocol_advertisement_to_buffer(_bootloader_vars.notification_buffer, DotBot);
-            mari_node_tx(_bootloader_vars.notification_buffer, length);
-            _bootloader_vars.advertise = false;
+            ipc_shared_data.battery_level = battery_level_read();
+            _bootloader_vars.battery_update = false;
         }
 
         if (ipc_shared_data.status != SWRMT_APPLICATION_RESETTING) {
@@ -547,26 +506,21 @@ int main(void) {
         }
 
         // Process available lighthouse data
-        db_lh2_process_location(&_bootloader_vars.lh2);
-        if (_bootloader_vars.lh2_update) {
-            // Copy LH2 code from dotbot application
-            _process_lh2();
-            _bootloader_vars.lh2_update = false;
-        }
-
-        if (_bootloader_vars.lh2_location) {
+        localization_process_data();
+        if (_bootloader_vars.position_update) {
+            localization_get_position((position_2d_t *)&ipc_shared_data.current_position);
             int16_t new_direction = -1000;
             _compute_angle(
-                (const protocol_lh2_location_t *)&ipc_shared_data.current_location,
-                &_control_loop_vars.lh2_previous_location,
+                (const position_2d_t *)&ipc_shared_data.current_position,
+                &_control_loop_vars.previous_position,
                 &new_direction
             );
             if (new_direction != -1000) {
                 _control_loop_vars.direction = new_direction;
             }
 
-            _control_loop_vars.lh2_previous_location.x = ipc_shared_data.current_location.x;
-            _control_loop_vars.lh2_previous_location.y = ipc_shared_data.current_location.y;
+            _control_loop_vars.previous_position.x = ipc_shared_data.current_position.x;
+            _control_loop_vars.previous_position.y = ipc_shared_data.current_position.y;
 
             if (!_control_loop_vars.initial_direction_compensated) {
                 _compensate_initial_direction();
@@ -583,13 +537,12 @@ int main(void) {
                 _control_loop_vars.target_reached = false;
                 _control_loop_vars.initial_direction_compensated = false;
                 _control_loop_vars.final_direction_compensated = false;
-                _control_loop_vars.lh2_previous_location.x = 0;
-                _control_loop_vars.lh2_previous_location.y = 0;
+                _control_loop_vars.previous_position.x = 0;
+                _control_loop_vars.previous_position.y = 0;
             }
 
-            _bootloader_vars.lh2_location = false;
+            _bootloader_vars.position_update = false;
         }
-#endif
     }
 }
 
@@ -611,11 +564,4 @@ void IPC_IRQHandler(void) {
         NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_APPLICATION_START] = 0;
         _bootloader_vars.start_application = true;
     }
-
-#if defined(USE_LH2)
-    if (NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_LH2_LOCATION]) {
-        NRF_IPC_S->EVENTS_RECEIVE[IPC_CHAN_LH2_LOCATION] = 0;
-        _bootloader_vars.lh2_location = true;
-    }
-#endif
 }

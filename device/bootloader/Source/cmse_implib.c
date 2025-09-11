@@ -72,29 +72,18 @@ __attribute__((cmse_nonsecure_entry)) void swarmit_log_data(uint8_t *data, size_
     NRF_IPC_S->TASKS_SEND[IPC_CHAN_LOG_EVENT] = 1;
 }
 
-__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_init(db_lh2_t *lh2) {
-    db_lh2_init(lh2, &db_lh2_d, &db_lh2_e);
-    db_lh2_start();
+__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_localization_init(void) {
+    localization_init();
 }
 
-__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_start(void) {
-    db_lh2_start();
+__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_localization_process_data(void) {
+    localization_process_data();
 }
 
-__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_stop(void) {
-    db_lh2_stop();
+__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_localization_get_position(position_2d_t *position) {
+    localization_get_position(position);
 }
-
-__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_process_location(db_lh2_t *lh2) {
-    db_lh2_process_location(lh2);
-}
-
-__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_position(swarmit_lh2_position_t *position) {
-    // TODO: to be done
-    (void)position;
-}
-
-__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_spim_isr(void) {
+__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_localization_handle_isr(void) {
     if (NRF_SPIM4_S->EVENTS_END) {
         // Clear the Interrupt flag
         NRF_SPIM4_S->EVENTS_END = 0;

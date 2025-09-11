@@ -16,13 +16,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include "lh2.h"
+#include "localization.h"
 
 typedef void (*ipc_isr_cb_t)(const uint8_t *, size_t) __attribute__((cmse_nonsecure_call));
-typedef struct {
-    int x;
-    int y;
-} swarmit_lh2_position_t;
 
 __attribute__((cmse_nonsecure_entry, aligned)) void swarmit_keep_alive(void);
 __attribute__((cmse_nonsecure_entry, aligned)) void swarmit_send_data_packet(const uint8_t *packet, uint8_t length);
@@ -34,12 +30,10 @@ __attribute__((cmse_nonsecure_entry, aligned)) uint64_t swarmit_read_device_id(v
 __attribute__((cmse_nonsecure_entry, aligned)) void swarmit_log_data(uint8_t *data, size_t length);
 
 // Lighthouse 2 functions
-__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_init(db_lh2_t *lh2);
-__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_start(void);
-__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_stop(void);
-__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_process_location(db_lh2_t *lh2);
-__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_position(swarmit_lh2_position_t *position);
-__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_lh2_spim_isr(void);
+__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_localization_init(void);
+__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_localization_process_data(void);
+__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_localization_get_position(position_2d_t *position);
+__attribute__((cmse_nonsecure_entry, aligned)) void swarmit_localization_handle_isr(void);
 
 // SAADC functions
 __attribute__((cmse_nonsecure_entry, aligned)) void swarmit_saadc_read(uint8_t channel, uint16_t *value);

@@ -17,8 +17,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "protocol.h"
-#include "radio.h"
-#include "tdma_client.h"
 
 #define IPC_IRQ_PRIORITY (1)
 
@@ -41,7 +39,6 @@ typedef enum {
     IPC_CHAN_LOG_EVENT          = 5,    ///< Channel used for logging events
     IPC_CHAN_OTA_START          = 6,    ///< Channel used for starting an OTA process
     IPC_CHAN_OTA_CHUNK          = 7,    ///< Channel used for writing a non secure image chunk
-    IPC_CHAN_LH2_LOCATION       = 8,    ///< Channel used to notify of a new location received
 } ipc_channels_t;
 
 typedef struct {
@@ -67,6 +64,12 @@ typedef struct __attribute__((packed)) {
     uint8_t chunk[INT8_MAX + 1];
 } ipc_ota_data_t;
 
+/// DotBot protocol LH2 computed location
+typedef struct __attribute__((packed)) {
+    uint32_t x;  ///< X coordinate, multiplied by 1e6
+    uint32_t y;  ///< Y coordinate, multiplied by 1e6
+} position_2d_t;
+
 typedef struct __attribute__((packed)) {
     bool                    net_ready;          ///< Network core is ready
     bool                    net_ack;            ///< Network core acked the latest request
@@ -77,8 +80,8 @@ typedef struct __attribute__((packed)) {
     ipc_log_data_t          log;                ///< Log data
     ipc_rng_data_t          rng;                ///< Rng shared data
     ipc_ota_data_t          ota;                ///< OTA data
-    protocol_lh2_location_t current_location;   ///< LH2 current location
-    protocol_lh2_location_t target_location;    ///< LH2 target location
+    position_2d_t           target_position;    ///< LH2 target location
+    position_2d_t           current_position;   ///< Current 2D position
     ipc_radio_pdu_t         tx_pdu;             ///< TX pdu
     ipc_radio_pdu_t         rx_pdu;             ///< RX pdu
 } ipc_shared_data_t;
