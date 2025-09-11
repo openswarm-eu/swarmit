@@ -148,6 +148,11 @@ def generate_status(status_data, devices=[], status_message="found"):
         justify="right",
     )
     table.add_column(
+        "Position",
+        style="cyan",
+        justify="right",
+    )
+    table.add_column(
         "Status",
         style="green",
         justify="center",
@@ -159,6 +164,7 @@ def generate_status(status_data, devices=[], status_message="found"):
             f"{device_addr}",
             f"{device_data.device.name}",
             f"[{battery_level_color(device_data.battery)}]{device_data.battery:>3}%",
+            f"({(device_data.pos_x / 1e6):.2f}, {(device_data.pos_y / 1e6):.2f})",
             f"{'[bold cyan]' if device_data.status == StatusType.Running else '[bold green]'}{device_data.status.name}",
         )
     return Group(header, table)

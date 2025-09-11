@@ -112,12 +112,6 @@ typedef struct __attribute__((packed)) {
     uint32_t frame_period;  ///< duration of a full TDMA frame
 } protocol_sync_frame_t;
 
-/// DotBot protocol LH2 computed location
-typedef struct __attribute__((packed)) {
-    uint32_t x;  ///< X coordinate, multiplied by 1e6
-    uint32_t y;  ///< Y coordinate, multiplied by 1e6
-} protocol_lh2_location_t;
-
 /**
  * @brief   Write the protocol header in a buffer
  *
