@@ -117,7 +117,7 @@ def battery_level_color(level: int):
     if level > 85:
         return "green"
     elif level > 65:
-        return "orange"
+        return "dark_orange"
     else:
         return "red"
 
