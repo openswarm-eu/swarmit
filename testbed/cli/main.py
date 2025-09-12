@@ -270,8 +270,8 @@ def flash(ctx, yes, start, ota_timeout, ota_max_retries, firmware):
     if start_data["missed"]:
         console = Console()
         console.print(
-            f"[bold red]Error:[/] {len(start_data["missed"])} acknowledgments "
-            f"are missing ({', '.join(sorted(set(start_data["missed"])))}). "
+            f"[bold red]Error:[/] {len(start_data['missed'])} acknowledgments "
+            f"are missing ({', '.join(sorted(set(start_data['missed'])))}). "
             "Aborting."
         )
         controller.stop()
@@ -280,10 +280,10 @@ def flash(ctx, yes, start, ota_timeout, ota_max_retries, firmware):
     print()
     print(f"Image size: [bold cyan]{len(fw)}B[/]")
     print(
-        f"Image hash: [bold cyan]{start_data["ota"].fw_hash.hex().upper()}[/]"
+        f"Image hash: [bold cyan]{start_data['ota'].fw_hash.hex().upper()}[/]"
     )
     print(
-        f"Radio chunks ([bold]{CHUNK_SIZE}B[/bold]): {start_data["ota"].chunks}"
+        f"Radio chunks ([bold]{CHUNK_SIZE}B[/bold]): {start_data['ota'].chunks}"
     )
     start_time = time.time()
     data = controller.transfer(fw, start_data["acked"])
