@@ -33,7 +33,7 @@
 #define SWARMIT_BASE_ADDRESS        (0x10000)
 
 #define BATTERY_UPDATE_DELAY        (1000U)
-#define POSITION_UPDATE_DELAY_MS    (100U) ///< 100ms delay between each position update
+#define POSITION_UPDATE_DELAY_MS    (500U) ///< 100ms delay between each position update
 
 #define ROBOT_DISTANCE_THRESHOLD    (0.05)
 #define ROBOT_DIRECTION_THRESHOLD   (0.01)
@@ -180,7 +180,6 @@ static void setup_ns_user(void) {
     tz_configure_periph_dma_non_secure(NRF_APPLICATION_PERIPH_ID_SPIM4);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_TIMER0);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_TIMER1);
-    tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_TIMER2);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_USBD);
     tz_configure_periph_dma_non_secure(NRF_APPLICATION_PERIPH_ID_USBD);
     tz_configure_periph_non_secure(NRF_APPLICATION_PERIPH_ID_USBREGULATOR);
@@ -207,10 +206,8 @@ static void setup_ns_user(void) {
     NVIC_SetTargetState(SPIM1_SPIS1_TWIM1_TWIS1_UARTE1_IRQn);
     NVIC_SetTargetState(SPIM2_SPIS2_TWIM2_TWIS2_UARTE2_IRQn);
     NVIC_SetTargetState(SPIM3_SPIS3_TWIM3_TWIS3_UARTE3_IRQn);
-    NVIC_SetTargetState(SPIM4_IRQn);
     NVIC_SetTargetState(TIMER0_IRQn);
     NVIC_SetTargetState(TIMER1_IRQn);
-    NVIC_SetTargetState(TIMER2_IRQn);
     NVIC_SetTargetState(USBD_IRQn);
     NVIC_SetTargetState(USBREGULATOR_IRQn);
     NVIC_SetTargetState(GPIOTE0_IRQn);
@@ -225,6 +222,7 @@ static void setup_ns_user(void) {
 }
 
 static void _update_position(void) {
+    puts("Update position");
     _bootloader_vars.position_update = true;
 }
 
@@ -389,11 +387,13 @@ int main(void) {
     battery_level_init();
     ipc_shared_data.battery_level = battery_level_read();
 
+    localization_init();
+
     // Check reset reason and switch to user image if reset was not triggered by any wdt timeout
     uint32_t resetreas = NRF_RESET_S->RESETREAS;
     NRF_RESET_S->RESETREAS = NRF_RESET_S->RESETREAS;
 
-    // Boot user image after soft system reset
+     //Boot user image after soft system reset
     if (resetreas & RESET_RESETREAS_SREQ_Detected << RESET_RESETREAS_SREQ_Pos) {
         // Experiment is running
         ipc_shared_data.status = SWRMT_APPLICATION_RUNNING;
@@ -402,6 +402,7 @@ int main(void) {
         setup_ns_user();
         setup_watchdog0();
         NVIC_SetTargetState(IPC_IRQn);
+        NVIC_SetTargetState(SPIM4_IRQn);  // Used for LH2 localization
 
         // Set the vector table address prior to jumping to image
         SCB_NS->VTOR = (uint32_t)table;
@@ -501,14 +502,16 @@ int main(void) {
             _bootloader_vars.battery_update = false;
         }
 
-        if (ipc_shared_data.status != SWRMT_APPLICATION_RESETTING) {
-            continue;
-        }
-
         // Process available lighthouse data
         localization_process_data();
         if (_bootloader_vars.position_update) {
+            puts("Update position");
             localization_get_position((position_2d_t *)&ipc_shared_data.current_position);
+
+            if (ipc_shared_data.status != SWRMT_APPLICATION_RESETTING) {
+                continue;
+            }
+
             int16_t new_direction = -1000;
             _compute_angle(
                 (const position_2d_t *)&ipc_shared_data.current_position,
